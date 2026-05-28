@@ -15,6 +15,8 @@ node_modules
 /dist
 /out
 *.tsbuildinfo
+# Tipos de Cloudflare generados por `wrangler types`
+worker-configuration.d.ts
 
 # ---------- Variables de entorno (nunca al repo) ----------
 .env
@@ -124,3 +126,6 @@ service-account*.json
 # ---------- Notas locales del usuario ----------
 NOTES.local.md
 SCRATCH.md
+
+# ---------- Capturas de verificación (Playwright) ----------
+/scripts/*.png

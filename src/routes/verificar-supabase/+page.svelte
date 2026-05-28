@@ -2,10 +2,10 @@
 	let { data } = $props();
 </script>
 
-<main class="mx-auto max-w-md p-6 pb-24">
+<main class="w-full px-5 py-6 md:px-8">
 	<header>
 		<p class="text-sm text-muted">
-			<a href="/" class="text-brand-500 underline">← Volver</a>
+			<a href="/ajustes" class="text-brand-500 underline">← Ajustes</a>
 		</p>
 		<h1 class="mt-1 text-2xl font-bold text-text">Verificar Supabase</h1>
 		<p class="mt-1 text-muted">Paso 0.2: confirmar que el proyecto se conecta.</p>

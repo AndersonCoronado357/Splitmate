@@ -26,9 +26,11 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.17.0",
 		"globals": "^17.4.0",
+		"playwright": "^1.60.0",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.5.1",
 		"prettier-plugin-tailwindcss": "^0.7.2",
+		"sharp": "^0.34.5",
 		"svelte": "^5.55.2",
 		"svelte-check": "^4.4.6",
 		"tailwindcss": "^4.2.2",
@@ -38,6 +40,8 @@
 		"wrangler": "^4.81.0"
 	},
 	"dependencies": {
+		"@fontsource-variable/inter": "^5.2.8",
+		"@lucide/svelte": "^1.16.0",
 		"@supabase/supabase-js": "^2.106.2"
 	}
 }

@@ -1,70 +1,82 @@
 <script lang="ts">
-	const muestra = [
-		{ nombre: 'brand-50', valor: '#E6F7F5' },
-		{ nombre: 'brand-200', valor: '#9FE3DC' },
-		{ nombre: 'brand-400', valor: '#46C9BC' },
-		{ nombre: 'brand-500', valor: '#0EB5A6' },
-		{ nombre: 'brand-700', valor: '#0A8A7E' },
-		{ nombre: 'brand-900', valor: '#075C54' }
-	];
+	// Datos placeholder (Fase 1: aún no hay backend de movimientos).
+	const saldoNeto = 0;
+	const aFavor = 0;
+	const enContra = 0;
+	const personas: { nombre: string; saldo: number }[] = [];
+
+	const fmt = (n: number) =>
+		new Intl.NumberFormat('es-CO', {
+			style: 'currency',
+			currency: 'COP',
+			maximumFractionDigits: 0
+		}).format(n);
+
+	const signo = (n: number) => (n > 0 ? '+ ' : n < 0 ? '− ' : '');
+
+	const colorSaldo = (n: number) =>
+		n > 0 ? 'text-money-favor' : n < 0 ? 'text-money-contra' : 'text-text';
 </script>
 
-<main class="mx-auto max-w-md p-6 pb-24">
+<div class="flex flex-1 flex-col px-5 py-6 md:px-8">
 	<header>
-		<p class="text-sm text-muted">Vista de humo · Paso 0.1</p>
-		<h1 class="mt-1 text-3xl font-bold text-brand-500">Splitmate</h1>
-		<p class="mt-1 text-muted">El compañero para dividir los gastos del hogar.</p>
+		<p class="text-xs text-muted">Hogar</p>
+		<p class="text-lg font-semibold text-text">Mi hogar</p>
 	</header>
 
-	<section class="mt-6 rounded-card bg-surface p-5 shadow-card">
-		<p class="text-sm text-muted">Saldo total</p>
-		<p class="tabular mt-1 text-4xl font-bold text-money-favor">+ $ 0</p>
-		<p class="mt-1 text-sm text-muted">Sin movimientos todavía.</p>
-	</section>
-
-	<section class="mt-4 grid grid-cols-2 gap-3">
-		<div class="rounded-card bg-money-favor-bg p-4">
-			<p class="text-xs text-muted">A favor</p>
-			<p class="tabular mt-1 text-lg font-semibold text-money-favor">+ $ 0</p>
+	<!-- Tarjetas de resumen: en fila en pantallas grandes -->
+	<section class="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3">
+		<div class="col-span-2 rounded-card border border-border bg-surface p-5 shadow-card md:col-span-1">
+			<p class="text-sm text-muted">Tu saldo</p>
+			<p class="tabular mt-1 text-4xl font-bold {colorSaldo(saldoNeto)}">
+				{signo(saldoNeto)}{fmt(Math.abs(saldoNeto))}
+			</p>
+			<p class="mt-1 text-sm text-muted">
+				{#if saldoNeto === 0}
+					Estás en cero. Sin deudas pendientes.
+				{:else if saldoNeto > 0}
+					En total te deben.
+				{:else}
+					En total debes.
+				{/if}
+			</p>
 		</div>
-		<div class="rounded-card bg-money-contra-bg p-4">
-			<p class="text-xs text-muted">En contra</p>
-			<p class="tabular mt-1 text-lg font-semibold text-money-contra">− $ 0</p>
-		</div>
-	</section>
 
-	<section class="mt-8">
-		<h2 class="text-sm font-semibold text-text">Paleta turquesa</h2>
-		<div class="mt-2 grid grid-cols-3 gap-2">
-			{#each muestra as c (c.nombre)}
-				<div class="overflow-hidden rounded-input border border-border">
-					<div class="h-10" style="background: {c.valor}"></div>
-					<div class="bg-surface p-2">
-						<p class="text-[10px] text-muted">{c.nombre}</p>
-						<p class="text-[11px] font-medium text-text">{c.valor}</p>
-					</div>
-				</div>
-			{/each}
+		<div class="rounded-card bg-money-favor-bg p-5">
+			<p class="text-sm text-money-favor">Te deben</p>
+			<p class="tabular mt-1 text-2xl font-semibold text-money-favor">{fmt(aFavor)}</p>
+		</div>
+
+		<div class="rounded-card bg-money-contra-bg p-5">
+			<p class="text-sm text-money-contra">Debes</p>
+			<p class="tabular mt-1 text-2xl font-semibold text-money-contra">{fmt(enContra)}</p>
 		</div>
 	</section>
 
-	<section class="mt-8 space-y-2">
-		<a
-			href="/verificar-supabase"
-			class="block rounded-input bg-brand-500 px-4 py-3 text-center font-semibold text-white hover:bg-brand-700"
-		>
-			Verificar conexión a Supabase
-		</a>
-		<a
-			href="/como-instalar"
-			class="block rounded-input border border-border bg-surface px-4 py-3 text-center font-medium text-brand-700 hover:bg-brand-50"
-		>
-			Cómo instalar en el celular
-		</a>
+	<!-- Por persona -->
+	<section class="mt-8 flex flex-1 flex-col">
+		<h2 class="text-sm font-semibold text-text">Por persona</h2>
+		{#if personas.length === 0}
+			<div
+				class="mt-3 flex flex-1 flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface px-6 py-14 text-center"
+			>
+				<p class="font-medium text-text">Aún no hay movimientos</p>
+				<p class="mt-1 text-sm text-muted">
+					Cuando registres un gasto compartido o un préstamo, aquí verás cuánto te deben y a quién le
+					debes, ya neteado.
+				</p>
+			</div>
+		{:else}
+			<ul class="mt-3 grid gap-2 sm:grid-cols-2">
+				{#each personas as p (p.nombre)}
+					<li class="flex items-center justify-between rounded-card bg-surface p-4 shadow-card">
+						<span class="font-medium text-text">{p.nombre}</span>
+						<span class="tabular font-semibold {colorSaldo(p.saldo)}">
+							{signo(p.saldo)}{fmt(Math.abs(p.saldo))}
+						</span>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	</section>
-
-	<footer class="mt-10 border-t border-border pt-4 text-xs text-muted">
-		Si ves los colores correctos y la tipografía limpia, el paso 0.1 está OK.
-		Toca el botón de arriba para validar el paso 0.2 (Supabase).
-	</footer>
-</main>
+</div>
