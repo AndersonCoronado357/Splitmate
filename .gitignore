@@ -1,0 +1,126 @@
+# ============================================================
+# .gitignore — Splitmate
+# SvelteKit + Supabase + Cloudflare Pages, desarrollo en Windows
+# ============================================================
+
+# ---------- Dependencias ----------
+node_modules
+.pnpm-store/
+
+# ---------- Output / build ----------
+.output
+.wrangler
+/.svelte-kit
+/build
+/dist
+/out
+*.tsbuildinfo
+
+# ---------- Variables de entorno (nunca al repo) ----------
+.env
+.env.*
+!.env.example
+!.env.test
+.dev.vars
+
+# ---------- Vite / Tailwind ----------
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+.vite/
+
+# ---------- Supabase CLI ----------
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+**/supabase/.branches/
+**/supabase/.temp/
+**/supabase/.env
+
+# ---------- Logs ----------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+logs/
+
+# ---------- Caches y tests ----------
+.cache/
+.tmp/
+.temp/
+.eslintcache
+.stylelintcache
+.parcel-cache/
+coverage/
+.nyc_output/
+playwright-report/
+playwright/.cache/
+test-results/
+
+# ---------- Editores e IDEs ----------
+# VS Code: conservamos lo recomendado del proyecto, ignoramos lo personal
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.history/
+
+# JetBrains
+.idea/
+*.iml
+
+# Sublime / Atom / Vim / Emacs
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*.code-workspace
+
+# ---------- Sistema operativo ----------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.stackdump
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ---------- Sensibles ----------
+*.pem
+*.key
+*.cer
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials.json
+service-account*.json
+
+# ---------- Locales / temporales ----------
+/static/uploads/
+/tmp/
+*.bak
+*.orig
+*.rej
+
+# ---------- Config local de herramientas de agente ----------
+.claude/
+
+# ---------- Notas locales del usuario ----------
+NOTES.local.md
+SCRATCH.md
