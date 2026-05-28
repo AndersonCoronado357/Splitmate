@@ -2,6 +2,10 @@
 	import Smartphone from '@lucide/svelte/icons/smartphone';
 	import PlugZap from '@lucide/svelte/icons/plug-zap';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import LogOut from '@lucide/svelte/icons/log-out';
+	import { page } from '$app/state';
+
+	const correo = $derived(page.data.user?.email ?? '');
 
 	const herramientas = [
 		{
@@ -19,22 +23,29 @@
 	];
 </script>
 
-<div class="flex w-full flex-1 flex-col px-5 py-1 md:px-8">
-	<header class="px-5 pt-6 pb-2">
+<div class="flex w-full flex-1 flex-col px-5 py-6 md:px-8">
+	<header>
 		<h1 class="text-2xl font-bold text-text">Ajustes</h1>
 	</header>
 
-	<section class="px-5 pt-4">
-		<h2 class="px-1 text-xs font-semibold tracking-wide text-muted uppercase">Cuenta y hogar</h2>
-		<div class="mt-2 rounded-card border border-dashed border-border bg-surface px-5 py-6 text-center">
-			<p class="text-sm text-muted">
-				La cuenta y la gestión del hogar llegan en la siguiente fase (inicio de sesión e
-				invitaciones).
-			</p>
+	<section class="pt-5">
+		<h2 class="px-1 text-xs font-semibold tracking-wide text-muted uppercase">Cuenta</h2>
+		<div class="mt-2 rounded-card bg-surface p-4 shadow-card">
+			<p class="text-xs text-muted">Sesión iniciada como</p>
+			<p class="mt-0.5 truncate font-medium text-text">{correo}</p>
+			<form method="POST" action="/auth/logout" class="mt-3">
+				<button
+					type="submit"
+					class="flex w-full items-center justify-center gap-2 rounded-input border border-border px-4 py-2.5 text-sm font-medium text-money-contra transition-colors hover:bg-money-contra-bg"
+				>
+					<LogOut size={16} />
+					Cerrar sesión
+				</button>
+			</form>
 		</div>
 	</section>
 
-	<section class="px-5 pt-6 pb-8">
+	<section class="pt-6">
 		<h2 class="px-1 text-xs font-semibold tracking-wide text-muted uppercase">Herramientas</h2>
 		<ul class="mt-2 overflow-hidden rounded-card bg-surface shadow-card">
 			{#each herramientas as item, i (item.href)}
@@ -60,7 +71,7 @@
 		</ul>
 	</section>
 
-	<footer class="mt-auto px-5 pb-6 text-center">
+	<footer class="mt-auto pt-8 pb-2 text-center">
 		<p class="text-xs text-muted">Splitmate · versión 0.0.1</p>
 	</footer>
 </div>

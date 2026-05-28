@@ -1,39 +1,24 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import SideNav from '$lib/components/SideNav.svelte';
-	import AppBar from '$lib/components/AppBar.svelte';
-	import { afterNavigate } from '$app/navigation';
+	import { invalidate } from '$app/navigation';
+	import { onMount } from 'svelte';
 
-	let { children } = $props();
-	let menuAbierto = $state(false);
+	let { data, children } = $props();
+	let { session, supabase } = $derived(data);
 
-	// Cerrar el cajón al cambiar de ruta.
-	afterNavigate(() => {
-		menuAbierto = false;
+	onMount(() => {
+		const { data: sub } = supabase.auth.onAuthStateChange((_, newSession) => {
+			if (newSession?.expires_at !== session?.expires_at) {
+				invalidate('supabase:auth');
+			}
+		});
+		return () => sub.subscription.unsubscribe();
 	});
-
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') menuAbierto = false;
-	}
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<svelte:window onkeydown={onKeydown} />
-
-<div class="app-viewport">
-	<div class="app-shell">
-		<SideNav abierto={menuAbierto} onCerrar={() => (menuAbierto = false)} />
-		<div class="app-body">
-			<AppBar onAbrir={() => (menuAbierto = true)} />
-			<main class="app-main">
-				<div class="app-content">
-					{@render children()}
-				</div>
-			</main>
-		</div>
-	</div>
-</div>
+{@render children()}
