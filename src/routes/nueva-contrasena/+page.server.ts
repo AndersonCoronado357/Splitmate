@@ -15,9 +15,13 @@ export const actions: Actions = {
 	default: async ({ request, locals: { supabase } }) => {
 		const formData = await request.formData();
 		const password = String(formData.get('password') ?? '');
+		const confirm = String(formData.get('password_confirm') ?? '');
 
 		if (password.length < 6) {
 			return fail(400, { error: 'La contraseña debe tener al menos 6 caracteres.' });
+		}
+		if (password !== confirm) {
+			return fail(400, { error: 'Las contraseñas no coinciden.' });
 		}
 
 		const { error } = await supabase.auth.updateUser({ password });

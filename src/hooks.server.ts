@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
+import { dev } from '$app/environment';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY } from '$env/static/public';
 
 const supabase: Handle = async ({ event, resolve }) => {
@@ -12,7 +13,11 @@ const supabase: Handle = async ({ event, resolve }) => {
 				getAll: () => event.cookies.getAll(),
 				setAll: (cookiesToSet) => {
 					cookiesToSet.forEach(({ name, value, options }) => {
-						event.cookies.set(name, value, { ...options, path: '/' });
+						// En dev servimos por HTTP (incluido el celular vía IP de la red),
+						// donde el navegador descarta cookies `Secure`. Forzamos no-secure
+						// en dev para que la sesión persista; en producción (HTTPS) van
+						// seguras.
+						event.cookies.set(name, value, { ...options, path: '/', secure: !dev });
 					});
 				}
 			}
