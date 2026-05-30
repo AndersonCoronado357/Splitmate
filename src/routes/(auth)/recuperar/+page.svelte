@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -75,6 +76,11 @@
 	{/if}
 
 	<p class="animate-fade-in mt-6 text-center text-sm text-muted" style="animation-delay: 210ms">
-		<a href="/login" class="font-medium text-brand-700 hover:underline">← Volver a iniciar sesión</a>
+		<a
+			href="/login"
+			class="inline-flex items-center gap-1.5 font-medium text-brand-700 hover:underline"
+		>
+			<ArrowLeft size={15} /> Volver a iniciar sesión
+		</a>
 	</p>
 </div>

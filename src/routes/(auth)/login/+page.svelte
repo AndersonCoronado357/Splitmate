@@ -7,14 +7,19 @@
 	let { form }: { form: ActionData } = $props();
 	let cargando = $state(false);
 
+	// Destino tras iniciar sesión (p. ej. al abrir un link de invitación).
+	const next = $derived(page.url.searchParams.get('next') ?? '');
+	const registroHref = $derived(next ? `/registro?next=${encodeURIComponent(next)}` : '/registro');
+
 	const inputClass =
 		'w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70';
 
 	async function entrarConGoogle() {
 		cargando = true;
+		const destino = next ? `?next=${encodeURIComponent(next)}` : '';
 		const { error } = await page.data.supabase.auth.signInWithOAuth({
 			provider: 'google',
-			options: { redirectTo: `${location.origin}/auth/callback` }
+			options: { redirectTo: `${location.origin}/auth/callback${destino}` }
 		});
 		if (error) cargando = false;
 	}
@@ -118,6 +123,6 @@
 
 	<p class="animate-fade-in mt-4 text-center text-sm text-muted" style="animation-delay: 350ms">
 		¿No tienes cuenta?
-		<a href="/registro" class="font-medium text-brand-700 hover:underline">Regístrate</a>
+		<a href={registroHref} class="font-medium text-brand-700 hover:underline">Regístrate</a>
 	</p>
 </div>

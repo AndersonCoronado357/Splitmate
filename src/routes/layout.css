@@ -51,8 +51,15 @@
 }
 
 /* ============================================================
-   Base global — la página NUNCA hace scroll. El scroll vive
-   dentro del área de contenido del shell (.app-main).
+   Base global — modelo de scroll CONTENIDO (igual que Drestyl):
+   el shell se fija al alto del viewport (100dvh) y el scroll vive DENTRO del
+   contenido (.app-content con overflow-y:auto), así el "chrome" (barra lateral /
+   barra superior) queda fijo y solo se desplaza el contenido.
+   CLAVE para el pull-to-refresh nativo: NO candamos el documento. El body NO
+   lleva overflow:hidden ni overscroll-behavior (igual que Drestyl). Así, al
+   llegar al tope del contenido y seguir tirando con el dedo, el gesto encadena
+   al documento y el navegador dispara su recargar nativo. El body igual no
+   scrollea, porque su contenido mide justo el viewport.
    ============================================================ */
 html,
 body {
@@ -66,8 +73,35 @@ body {
 	font-family: var(--font-sans);
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
-	overflow: hidden;
-	overscroll-behavior: none;
+}
+
+/* ============================================================
+   Scrollbar personalizada con la paleta de la app
+   ============================================================ */
+:root {
+	--color-scrollbar-track: transparent;
+	--color-scrollbar-thumb: #cbeee8; /* mint claro (más claro que brand-200) */
+	--color-scrollbar-thumb-hover: #9fe3dc; /* brand-200 */
+}
+/* OJO: no usamos `scrollbar-width`/`scrollbar-color` (estándar) porque, si se
+   definen, Chrome ignora por completo las reglas `::-webkit-scrollbar` (y con
+   ellas el ocultar las flechas). Dejamos solo las webkit, tal cual el ejemplo. */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: var(--color-scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+	background: var(--color-scrollbar-thumb);
+	border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-scrollbar-thumb-hover);
+}
+::-webkit-scrollbar-button {
+	display: none;
 }
 
 /* Cifras alineables en columnas (saldos, montos). */
@@ -133,6 +167,14 @@ body {
 	will-change: transform, opacity;
 }
 
+/* Máscara para íconos de fondo: esconde el centro (donde suele estar el texto)
+   y solo muestra los íconos en el anillo exterior. Garantiza que un ícono
+   decorativo nunca quede directamente debajo del contenido principal. */
+.decor-icons-mask {
+	-webkit-mask-image: radial-gradient(ellipse at center, transparent 55%, black 90%);
+	mask-image: radial-gradient(ellipse at center, transparent 55%, black 90%);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.animate-fade-up {
 		animation: none;
@@ -144,53 +186,62 @@ body {
 }
 
 /* ============================================================
-   App shell responsivo — siempre llena el viewport, la página
-   nunca hace scroll (el scroll vive en .app-main).
-   - Móvil: columna -> contenido + barra inferior.
-   - Escritorio (>=768px): fila -> barra lateral + contenido.
+   App shell — patrón Drestyl. El shell mide EXACTO el viewport (100dvh) y
+   recorta (overflow:hidden) en cada nivel, menos en .app-content, que es el
+   ÚNICO que scrollea (overflow-y:auto). Resultado: la ventana no se mueve, el
+   chrome (barra lateral fija a la izquierda en escritorio, barra superior
+   arriba en móvil) queda quieto y solo el contenido se desplaza.
+   Equivalencia con Drestyl: .app-shell = `flex h-dvh`, .app-main = `main
+   overflow-hidden`, .app-content = la `<section flex-1 min-h-0 overflow-y-auto>`
+   de cada página.
    ============================================================ */
 .app-viewport {
 	height: 100dvh;
-	background: var(--color-bg);
 	overflow: hidden;
+	background: var(--color-bg);
 }
 
 .app-shell {
-	display: flex;
-	flex-direction: column;
 	height: 100dvh;
 }
 
-/* Columna que contiene la barra superior (móvil) + el área principal.
-   Debe crecer para llenar el ancho (junto a la barra lateral) y el alto. */
+/* Columna: barra superior (móvil) + el área principal. No scrollea: recorta. */
 .app-body {
 	display: flex;
 	flex-direction: column;
-	flex: 1 1 auto;
+	height: 100dvh;
 	min-width: 0;
 	min-height: 0;
+	overflow: hidden;
 }
 
 .app-main {
+	display: flex;
+	flex-direction: column;
 	flex: 1 1 auto;
 	min-height: 0;
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	-webkit-overflow-scrolling: touch;
+	overflow: hidden;
 }
 
-/* El contenido ocupa TODO el ancho disponible del área principal.
-   El control de ancho/legibilidad lo hace cada pantalla (p. ej.
-   Ajustes se acota a sí mismo). */
+/* El ÚNICO scroller de la app: el contenido. Scroll interno (no el del
+   documento), así no aparece el scroll del navegador a nivel de app. NO lleva
+   overscroll-behavior: con el valor por defecto (auto), al llegar al tope el
+   gesto encadena al documento y deja pasar el pull-to-refresh nativo, igual
+   que el scroller de cada página en Drestyl. */
 .app-content {
 	display: flex;
 	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
 	width: 100%;
-	min-height: 100%;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
 }
 
+/* Escritorio (>=768px): la barra lateral va fija a la izquierda; el contenido
+   se corre por su ancho. El scroll sigue viviendo en .app-content. */
 @media (min-width: 768px) {
-	.app-shell {
-		flex-direction: row;
+	.app-body {
+		padding-left: 15rem; /* ancho de la barra lateral fija (md:w-60) */
 	}
 }

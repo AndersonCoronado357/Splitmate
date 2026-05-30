@@ -1,5 +1,7 @@
 <script lang="ts">
-	// Datos placeholder (Fase 1: aún no hay backend de movimientos).
+	let { data } = $props();
+
+	// Datos placeholder (el balance real llega en fases siguientes).
 	const saldoNeto = 0;
 	const aFavor = 0;
 	const enContra = 0;
@@ -8,7 +10,7 @@
 	const fmt = (n: number) =>
 		new Intl.NumberFormat('es-CO', {
 			style: 'currency',
-			currency: 'COP',
+			currency: data.hogarActivo?.moneda || 'COP',
 			maximumFractionDigits: 0
 		}).format(n);
 
@@ -18,10 +20,10 @@
 		n > 0 ? 'text-money-favor' : n < 0 ? 'text-money-contra' : 'text-text';
 </script>
 
-<div class="flex flex-1 flex-col px-5 py-6 md:px-8">
+<div class="flex flex-col px-5 py-6 md:px-8 lg:flex-1">
 	<header>
-		<p class="text-xs text-muted">Hogar</p>
-		<p class="text-lg font-semibold text-text">Mi hogar</p>
+		<p class="text-xs text-muted">Hola, {data.perfil?.display_name || 'bienvenido'}</p>
+		<p class="text-lg font-semibold text-text">{data.hogarActivo?.nombre}</p>
 	</header>
 
 	<!-- Tarjetas de resumen: en fila en pantallas grandes -->

@@ -1,19 +1,24 @@
 <script lang="ts">
-	type Modo = 'login' | 'registro';
+	type Modo = 'login' | 'registro' | 'bienvenida';
 	let { modo }: { modo: Modo } = $props();
 
 	const VERSION = '0.0.1';
 
 	const copy = $derived(
-		modo === 'registro'
+		modo === 'bienvenida'
 			? {
-					titulo: 'Únete y empieza en minutos.',
-					texto: 'Crea tu hogar, invita a los tuyos y lleven juntos las cuentas, sin enredos ni discusiones.'
+					titulo: 'Un último paso y listo.',
+					texto: 'Crea tu hogar o únete con el código de quien te invitó. Después invitas a los tuyos y empiezan a llevar las cuentas juntos.'
 				}
-			: {
-					titulo: 'Las cuentas del hogar, claras.',
-					texto: 'Gastos, préstamos y fijos en un solo lugar. Splitmate calcula quién le debe a quién, al instante y en vivo.'
-				}
+			: modo === 'registro'
+				? {
+						titulo: 'Únete y empieza en minutos.',
+						texto: 'Crea tu hogar, invita a los tuyos y lleven juntos las cuentas, sin enredos ni discusiones.'
+					}
+				: {
+						titulo: 'Las cuentas del hogar, claras.',
+						texto: 'Gastos, préstamos y fijos en un solo lugar. Splitmate calcula quién le debe a quién, al instante y en vivo.'
+					}
 	);
 </script>
 

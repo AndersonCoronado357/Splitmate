@@ -7,14 +7,19 @@
 	let { form }: { form: ActionData } = $props();
 	let cargando = $state(false);
 
+	// Destino tras crear la cuenta (p. ej. al abrir un link de invitación).
+	const next = $derived(page.url.searchParams.get('next') ?? '');
+	const loginHref = $derived(next ? `/login?next=${encodeURIComponent(next)}` : '/login');
+
 	const inputClass =
 		'w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70';
 
 	async function entrarConGoogle() {
 		cargando = true;
+		const destino = next ? `?next=${encodeURIComponent(next)}` : '';
 		const { error } = await page.data.supabase.auth.signInWithOAuth({
 			provider: 'google',
-			options: { redirectTo: `${location.origin}/auth/callback` }
+			options: { redirectTo: `${location.origin}/auth/callback${destino}` }
 		});
 		if (error) cargando = false;
 	}
@@ -42,6 +47,20 @@
 		class="animate-fade-in space-y-3"
 		style="animation-delay: 140ms"
 	>
+		<div class="space-y-1.5">
+			<label for="nombre" class="block text-sm font-medium text-text">Tu nombre</label>
+			<input
+				id="nombre"
+				name="nombre"
+				type="text"
+				autocomplete="name"
+				required
+				value={form?.nombre ?? ''}
+				placeholder="¿Cómo te llamas?"
+				class={inputClass}
+			/>
+		</div>
+
 		<div class="space-y-1.5">
 			<label for="email" class="block text-sm font-medium text-text">Correo</label>
 			<input
@@ -119,6 +138,6 @@
 
 	<p class="animate-fade-in mt-4 text-center text-sm text-muted" style="animation-delay: 350ms">
 		¿Ya tienes cuenta?
-		<a href="/login" class="font-medium text-brand-700 hover:underline">Inicia sesión</a>
+		<a href={loginHref} class="font-medium text-brand-700 hover:underline">Inicia sesión</a>
 	</p>
 </div>

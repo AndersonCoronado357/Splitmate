@@ -20,7 +20,8 @@ pantallas con todo esto ya claro.
   hogares al mismo tiempo (ej.: pareja + casa de los papás + viaje con
   amigos). Habrá un selector de hogar.
 - **Registro de cuenta:**
-  - Email + contraseña.
+  - Email + contraseña + **nombre** (se pide al registrarse y se usa en
+    todo; con Google se toma el nombre de la cuenta automáticamente).
   - Login con Google.
   - (Magic link queda descartado por ahora.)
 

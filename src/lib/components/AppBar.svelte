@@ -1,23 +1,22 @@
 <script lang="ts">
 	import Menu from '@lucide/svelte/icons/menu';
-	import favicon from '$lib/assets/favicon.svg';
+	import HogarSwitcher from './HogarSwitcher.svelte';
 
 	let { onAbrir }: { onAbrir?: () => void } = $props();
 </script>
 
 <header
-	class="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-3 md:hidden"
+	class="sticky top-0 z-20 flex shrink-0 items-center gap-1 border-b border-border bg-surface px-2 py-2 md:hidden"
 >
 	<button
 		type="button"
 		aria-label="Abrir menú"
-		class="rounded-lg p-1.5 text-text transition-colors hover:bg-bg"
+		class="shrink-0 rounded-lg p-2 text-text transition-colors hover:bg-bg"
 		onclick={onAbrir}
 	>
 		<Menu size={22} />
 	</button>
-	<a href="/" class="flex items-center gap-2">
-		<img src={favicon} alt="" class="h-6 w-6" />
-		<span class="font-bold text-text">Splitmate</span>
-	</a>
+	<div class="min-w-0 flex-1">
+		<HogarSwitcher variant="topbar" />
+	</div>
 </header>
