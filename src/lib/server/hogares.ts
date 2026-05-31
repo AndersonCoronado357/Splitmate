@@ -45,7 +45,8 @@ export type MiembroHogar = {
 };
 
 // Miembros del hogar (+ perfiles), ordenados: admins primero; yo primero; luego
-// por nombre. Se cachea con el layout para que /hogar abra sin consultar.
+// por nombre. UNA sola query gracias al FK adicional `miembros_hogar_user_id_profiles_fkey`
+// (migración 008) que permite a PostgREST embeber `profiles` directamente.
 export async function cargarMiembros(
 	supabase: SupabaseClient,
 	hogarId: string,
@@ -53,24 +54,29 @@ export async function cargarMiembros(
 ): Promise<MiembroHogar[]> {
 	const { data: ms } = await supabase
 		.from('miembros_hogar')
-		.select('user_id, rol')
+		.select(
+			`user_id, rol,
+			 profiles!miembros_hogar_user_id_profiles_fkey (display_name, avatar_url)`
+		)
 		.eq('hogar_id', hogarId);
 
-	const ids = (ms ?? []).map((m) => m.user_id);
-	const { data: profs } = ids.length
-		? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', ids)
-		: { data: [] as { id: string; display_name: string; avatar_url: string | null }[] };
+	type Fila = {
+		user_id: string;
+		rol: string;
+		profiles: { display_name: string; avatar_url: string | null } | { display_name: string; avatar_url: string | null }[] | null;
+	};
 
-	const mapa = new Map((profs ?? []).map((p) => [p.id, p]));
-
-	return (ms ?? [])
-		.map((m) => ({
-			userId: m.user_id,
-			rol: m.rol as string,
-			nombre: mapa.get(m.user_id)?.display_name || 'Sin nombre',
-			avatar: mapa.get(m.user_id)?.avatar_url || null,
-			soyYo: m.user_id === miId
-		}))
+	return ((ms ?? []) as Fila[])
+		.map((m) => {
+			const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+			return {
+				userId: m.user_id,
+				rol: m.rol,
+				nombre: p?.display_name || 'Sin nombre',
+				avatar: p?.avatar_url || null,
+				soyYo: m.user_id === miId
+			};
+		})
 		.sort((a, b) => {
 			if (a.rol !== b.rol) return a.rol === 'admin' ? -1 : 1;
 			if (a.soyYo !== b.soyYo) return a.soyYo ? -1 : 1;

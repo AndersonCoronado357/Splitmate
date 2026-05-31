@@ -109,6 +109,18 @@ body {
 	font-variant-numeric: tabular-nums;
 }
 
+/* Esconde las flechitas (spinners) de los <input type="number"> en TODOS los
+   navegadores. Quedan limpios como los de texto, sin el "stepper" feo. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+input[type='number'] {
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+
 /* ============================================================
    Animaciones (estilo Drestyl): cascada fade-up con easeOutExpo y
    "lluvia" de íconos en diagonal para el panel de auth.

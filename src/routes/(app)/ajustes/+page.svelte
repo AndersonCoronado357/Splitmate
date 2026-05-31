@@ -130,7 +130,8 @@
 			<h2 class="px-1 text-xs font-semibold tracking-wide text-muted uppercase">Perfil</h2>
 			<div class="mt-2 flex flex-1 flex-col rounded-card bg-surface p-6 shadow-card lg:min-h-0">
 				<div class="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-				<!-- Foto (grande) -->
+				<!-- Foto (grande, clickeable) — al hacer hover/tap muestra overlay limpio
+				     con "Cambiar foto"; sin botón flotante de cámara superpuesto. -->
 				<form
 					method="POST"
 					action="?/subirFoto"
@@ -155,10 +156,10 @@
 						type="button"
 						onclick={abrirSelectorFoto}
 						disabled={subiendoFoto}
-						class="group relative block size-44 rounded-full disabled:opacity-60 lg:size-[clamp(12rem,44vh,26rem)]"
+						class="group relative block size-40 rounded-full transition-shadow duration-200 hover:shadow-card lg:size-[clamp(10rem,38vh,20rem)]"
 						aria-label="Cambiar foto"
 					>
-						<div class="size-full overflow-hidden rounded-full ring-4 ring-brand-50">
+						<div class="size-full overflow-hidden rounded-full">
 							{#if perfil.avatar && !imgError}
 								<img
 									src={perfil.avatar}
@@ -175,6 +176,8 @@
 								</span>
 							{/if}
 						</div>
+						<!-- Camarita: indicador de "click para cambiar". Ring del color del
+						     surface para que se separe visualmente del avatar. -->
 						<span
 							class="absolute right-[7%] bottom-[7%] flex size-10 items-center justify-center rounded-full bg-brand-500 text-white shadow-card ring-2 ring-surface transition-colors duration-200 ease-out group-hover:bg-brand-700 lg:size-12"
 						>
@@ -211,32 +214,27 @@
 				</form>
 				<p class="-mt-2 text-muted lg:text-lg">{perfil.email}</p>
 
-				<div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-					<button
-						type="button"
-						onclick={abrirSelectorFoto}
-						class="text-sm font-medium text-brand-700 hover:underline"
+				<!-- Acción secundaria: Quitar foto. Solo aparece si subiste tu propia foto. -->
+				{#if perfil.fotoPropia}
+					<form
+						method="POST"
+						action="?/quitarFoto"
+						use:enhance={() => {
+							subiendoFoto = true;
+							return async ({ update }) => {
+								await update({ reset: false });
+								subiendoFoto = false;
+							};
+						}}
 					>
-						Cambiar foto
-					</button>
-					{#if perfil.fotoPropia}
-						<form
-							method="POST"
-							action="?/quitarFoto"
-							use:enhance={() => {
-								subiendoFoto = true;
-								return async ({ update }) => {
-									await update({ reset: false });
-									subiendoFoto = false;
-								};
-							}}
+						<button
+							type="submit"
+							class="rounded-input px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-money-contra-bg hover:text-money-contra"
 						>
-							<button type="submit" class="text-sm font-medium text-muted hover:text-text">
-								Quitar foto
-							</button>
-						</form>
-					{/if}
-				</div>
+							Quitar foto
+						</button>
+					</form>
+				{/if}
 
 				{#if form?.seccion === 'foto' && form?.error}
 						<p class="rounded-input bg-money-contra-bg px-3 py-1.5 text-sm text-money-contra">

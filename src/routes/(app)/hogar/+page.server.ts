@@ -64,8 +64,6 @@ export const actions: Actions = {
 			.eq('user_id', user.id);
 		if (error) return fail(400, { seccion: 'salir', error: error.message });
 
-		// La cookie apuntaba a este hogar; la limpiamos para que el activo se
-		// recalcule (al primero que quede, o a bienvenida si no queda ninguno).
 		cookies.delete(HOGAR_COOKIE, { path: '/' });
 
 		redirect(303, '/');

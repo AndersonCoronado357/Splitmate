@@ -17,7 +17,18 @@ export const navTabs: NavTab[] = [
 	{ href: '/ajustes', label: 'Ajustes', icon: Settings }
 ];
 
+// Rutas "hijas" que no aparecen en el sidebar pero pertenecen a un módulo
+// principal. Cuando el usuario está en una de estas, queremos que el item de
+// nav del módulo padre quede resaltado (ej.: /categorias resalta "Gastos").
+const SUBRUTAS_DE: Record<string, string> = {
+	'/categorias': '/gastos'
+};
+
 export function navActivo(pathname: string, href: string): boolean {
 	if (href === '/') return pathname === '/';
+	// Sub-ruta declarada → cuenta como su padre.
+	for (const [sub, padre] of Object.entries(SUBRUTAS_DE)) {
+		if ((pathname === sub || pathname.startsWith(sub + '/')) && href === padre) return true;
+	}
 	return pathname.startsWith(href);
 }
