@@ -52,6 +52,14 @@
 	onMount(() => {
 		if (!hogarId) return;
 		const supabase = supabaseBrowser();
+
+		// Auth explícita del canal: sin esto, RLS filtra TODO porque el
+		// realtime se conecta como anónimo y no puede ver las filas privadas.
+		const session = page.data.session as { access_token?: string } | undefined;
+		if (session?.access_token) {
+			supabase.realtime.setAuth(session.access_token);
+		}
+
 		let debounceId: ReturnType<typeof setTimeout> | null = null;
 		const refrescar = () => {
 			if (debounceId) clearTimeout(debounceId);
@@ -78,12 +86,13 @@
 				{ event: '*', schema: 'public', table: 'gasto_divisiones' },
 				refrescar
 			)
-			.on(
-				'postgres_changes',
-				{ event: '*', schema: 'public', table: 'aportes' },
-				refrescar
-			)
-			.subscribe();
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'aportes' }, refrescar)
+			.subscribe((status: string) => {
+				// Log defensivo en consola para detectar fallas de conexión.
+				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+					console.warn('[realtime inicio] estado:', status);
+				}
+			});
 
 		return () => {
 			if (debounceId) clearTimeout(debounceId);

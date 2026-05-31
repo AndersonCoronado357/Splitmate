@@ -1,17 +1,24 @@
 <script lang="ts">
 	import { invalidate } from '$app/navigation';
+	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Receipt from '@lucide/svelte/icons/receipt';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Tag from '@lucide/svelte/icons/tag';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { iconoCategoria } from '$lib/iconosCategoria';
+	import { supabaseBrowser } from '$lib/supabase-browser';
 	import GastoDetalle from '$lib/components/GastoDetalle.svelte';
 	import SkeletonContenido from '$lib/components/SkeletonContenido.svelte';
 	import type { GastoDetalle as GastoDetalleData } from '$lib/server/gastos';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	const hogarId = $derived(
+		(page.data.hogarActivo as { id?: string } | undefined)?.id ?? ''
+	);
 
 	// Monto, mi parte y fecha vienen YA formateados desde el server
 	// (gasto.montoTexto, gasto.miParteTexto, gasto.fechaTexto). Así evitamos
@@ -120,6 +127,59 @@
 		// Refrescamos también el listado (la "mi parte" puede haber cambiado).
 		invalidate('app:gastos-lista');
 	}
+
+	// === Tiempo real ======================================================
+	// Igual que en Inicio: nos suscribimos a cambios sobre gastos/divisiones/
+	// aportes del hogar. Cuando otro miembro modifica algo, refrescamos el
+	// listado. Si además el modal está abierto en ese mismo gasto, también
+	// refrescamos su detalle (vía onCambio) para que se vea al instante.
+	onMount(() => {
+		if (!hogarId) return;
+		const supabase = supabaseBrowser();
+
+		const session = page.data.session as { access_token?: string } | undefined;
+		if (session?.access_token) {
+			supabase.realtime.setAuth(session.access_token);
+		}
+
+		let debounceId: ReturnType<typeof setTimeout> | null = null;
+		const refrescar = () => {
+			if (debounceId) clearTimeout(debounceId);
+			debounceId = setTimeout(() => {
+				invalidate('app:gastos-lista');
+				if (abiertoId) onCambio(abiertoId);
+			}, 250);
+		};
+
+		const canal = supabase
+			.channel(`gastos-${hogarId}`)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'gastos_compartidos',
+					filter: `hogar_id=eq.${hogarId}`
+				},
+				refrescar
+			)
+			.on(
+				'postgres_changes',
+				{ event: '*', schema: 'public', table: 'gasto_divisiones' },
+				refrescar
+			)
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'aportes' }, refrescar)
+			.subscribe((status: string) => {
+				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+					console.warn('[realtime gastos] estado:', status);
+				}
+			});
+
+		return () => {
+			if (debounceId) clearTimeout(debounceId);
+			supabase.removeChannel(canal);
+		};
+	});
 </script>
 
 <svelte:window onkeydown={onTeclaCerrar} />
