@@ -54,8 +54,12 @@ export const actions: Actions = {
 		return { seccion: 'borrar', ok: true };
 	},
 
-	// Registrar un aporte (pago parcial o total) a una división del gasto. La
-	// RLS permite que lo registre el propio participante o el pagador del gasto.
+	// Registrar un aporte (pago parcial o total) a una división del gasto.
+	//   * Si lo registra el DEUDOR (participante de la división) → estado
+	//     'pendiente' hasta que el pagador del gasto confirme. Mi vista lo
+	//     descuenta al instante; la del cobrador no.
+	//   * Si lo registra el PAGADOR del gasto → estado 'confirmado' directo:
+	//     él es la autoridad de cobro.
 	aportar: async ({ request, locals: { supabase, user } }) => {
 		if (!user) redirect(303, '/login');
 
@@ -73,24 +77,78 @@ export const actions: Actions = {
 			return fail(400, { seccion: 'aportar', error: 'Monto inválido.' });
 		}
 
+		// Necesito saber quién es el pagador del gasto para decidir el estado.
+		const { data: div } = await supabase
+			.from('gasto_divisiones')
+			.select('id, gasto_id, gastos_compartidos(pagador_id)')
+			.eq('id', divisionId)
+			.maybeSingle();
+		type DivRow = {
+			gastos_compartidos: { pagador_id: string } | { pagador_id: string }[] | null;
+		};
+		const g = div ? ((div as unknown) as DivRow).gastos_compartidos : null;
+		const pagadorId = g ? (Array.isArray(g) ? g[0]?.pagador_id : g.pagador_id) : null;
+		const esPagador = pagadorId === user.id;
+		const estado = esPagador ? 'confirmado' : 'pendiente';
+		const confirmadoAt = esPagador ? new Date().toISOString() : null;
+
 		const { error } = await supabase.from('aportes').insert({
 			division_id: divisionId,
 			monto,
 			fecha: fecha ?? new Date().toISOString().slice(0, 10),
 			registrado_por: user.id,
-			nota
+			nota,
+			estado,
+			confirmado_at: confirmadoAt
 		});
 		if (error) return fail(400, { seccion: 'aportar', error: error.message });
 
 		return { seccion: 'aportar', ok: true };
 	},
 
-	// Borrar un aporte. La RLS permite borrarlo a quien lo registró, al participante
-	// dueño de la división o al pagador del gasto (migración 009).
-	// IMPORTANTE: chequeamos `count` para detectar borrados de 0 filas (RLS rechaza
-	// silenciosamente, fila inexistente, etc.). Si no devolvemos error en ese
-	// caso, el cliente cree que se borró y al refrescar el aporte reaparece →
-	// el bug clásico de "elimino y vuelve a aparecer".
+	// El pagador del gasto confirma un aporte pendiente del deudor.
+	confirmarAporte: async ({ request, locals: { supabase, user } }) => {
+		if (!user) redirect(303, '/login');
+		const fd = await request.formData();
+		const id = String(fd.get('id') ?? '').trim();
+		if (!id) return fail(400, { seccion: 'aportar', error: 'Falta el id.' });
+
+		const { error, count } = await supabase
+			.from('aportes')
+			.update(
+				{ estado: 'confirmado', confirmado_at: new Date().toISOString() },
+				{ count: 'exact' }
+			)
+			.eq('id', id)
+			.eq('estado', 'pendiente');
+		if (error) return fail(400, { seccion: 'aportar', error: error.message });
+		if (!count) {
+			return fail(403, { seccion: 'aportar', error: 'No se pudo confirmar el aporte.' });
+		}
+		return { seccion: 'aportar', ok: true };
+	},
+
+	// El pagador del gasto rechaza un aporte pendiente.
+	rechazarAporte: async ({ request, locals: { supabase, user } }) => {
+		if (!user) redirect(303, '/login');
+		const fd = await request.formData();
+		const id = String(fd.get('id') ?? '').trim();
+		if (!id) return fail(400, { seccion: 'aportar', error: 'Falta el id.' });
+
+		const { error, count } = await supabase
+			.from('aportes')
+			.update({ estado: 'rechazado' }, { count: 'exact' })
+			.eq('id', id)
+			.eq('estado', 'pendiente');
+		if (error) return fail(400, { seccion: 'aportar', error: error.message });
+		if (!count) {
+			return fail(403, { seccion: 'aportar', error: 'No se pudo rechazar el aporte.' });
+		}
+		return { seccion: 'aportar', ok: true };
+	},
+
+	// Borrar un aporte. La RLS permite borrarlo a quien lo registró siempre,
+	// o al pagador del gasto si el aporte sigue pendiente.
 	borrarAporte: async ({ request, locals: { supabase, user } }) => {
 		if (!user) redirect(303, '/login');
 		const fd = await request.formData();

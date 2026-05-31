@@ -46,12 +46,16 @@ export type GastoListado = {
 	pagadorAvatar: string | null;
 	categoria: { nombre: string; icono: string | null } | null;
 	miParte: number; // 0 si no participo
+	miPendiente: number; // lo que aún debo (aportes confirmados ya descuentan)
+	miPorConfirmar: number; // aportes míos pendientes de confirmación
 	esMio: boolean; // soy el pagador
 	// Strings ya formateados en el servidor para evitar que el cliente
 	// vuelva a correr `Intl` al hidratar (lo que dispara re-render en toda
 	// la lista = parpadeo). Server y cliente reciben EL MISMO string.
 	montoTexto: string;
 	miParteTexto: string;
+	miPendienteTexto: string;
+	miPorConfirmarTexto: string;
 	fechaTexto: string;
 };
 
@@ -87,7 +91,7 @@ export async function listarGastos(
 		.select(
 			`id, titulo, monto, fecha, pagador_id, categoria_id, created_at,
 			 categorias (nombre, icono),
-			 gasto_divisiones (monto)`
+			 gasto_divisiones (monto, aportes (monto, estado))`
 		)
 		.eq('hogar_id', hogarId)
 		.eq('gasto_divisiones.participante_id', miId)
@@ -98,11 +102,34 @@ export async function listarGastos(
 
 	const fmtMoneda = fmtMonedaFactory(moneda);
 
+	type DivRow = {
+		monto: number;
+		aportes: Array<{ monto: number; estado: EstadoAporte }> | null;
+	};
+
 	return gastos.map((g) => {
 		const cat = Array.isArray(g.categorias) ? g.categorias[0] : g.categorias;
 		const perfil = perfiles.get(g.pagador_id as string);
-		const misDivs = (g.gasto_divisiones ?? []) as Array<{ monto: number }>;
+		const misDivs = (g.gasto_divisiones ?? []) as DivRow[];
 		const miParte = misDivs.length > 0 ? Number(misDivs[0].monto) : 0;
+		const esMio = (g.pagador_id as string) === miId;
+		// Cuando yo creé el gasto, mi propia parte queda saldada al instante
+		// (pagué el total al armarlo). En cualquier otro caso:
+		//   * miPendiente = lo que aún me falta abonar (mis aportes pendientes
+		//     + confirmados ya descuentan, asimétrico).
+		//   * miPorConfirmar = suma de mis aportes pendientes (lo que ya
+		//     mandé pero el pagador aún no confirmó).
+		let miPendiente = 0;
+		let miPorConfirmar = 0;
+		if (miParte > 0 && !esMio) {
+			const aportes = misDivs[0].aportes ?? [];
+			const activos = aportes.filter((a) => a.estado !== 'rechazado');
+			const sumaActivos = activos.reduce((acc, a) => acc + Number(a.monto), 0);
+			miPendiente = Math.max(0, miParte - sumaActivos);
+			miPorConfirmar = aportes
+				.filter((a) => a.estado === 'pendiente')
+				.reduce((acc, a) => acc + Number(a.monto), 0);
+		}
 		const monto = Number(g.monto);
 		return {
 			id: g.id as string,
@@ -114,15 +141,137 @@ export async function listarGastos(
 			pagadorAvatar: perfil?.avatar_url || null,
 			categoria: cat ? { nombre: cat.nombre as string, icono: cat.icono as string | null } : null,
 			miParte,
-			esMio: (g.pagador_id as string) === miId,
+			miPendiente,
+			miPorConfirmar,
+			esMio,
 			montoTexto: fmtMoneda.format(monto),
 			miParteTexto: miParte > 0 ? fmtMoneda.format(miParte) : '',
+			miPendienteTexto: miPendiente > 0 ? fmtMoneda.format(miPendiente) : '',
+			miPorConfirmarTexto: miPorConfirmar > 0 ? fmtMoneda.format(miPorConfirmar) : '',
 			fechaTexto: fmtFechaCorta(g.fecha as string)
 		};
 	});
 }
 
+// Desglose por persona de las deudas pendientes contra y a favor mío,
+// gasto por gasto. Se usa en la home para mostrar bajo "Le debes $X" la lista
+// de gastos involucrados (renglón compacto, solo títulos).
+export type GastoEnDeuda = {
+	divisionId: string;
+	gastoId: string;
+	titulo: string;
+	fecha: string;
+	fechaTexto: string;
+	pendiente: number;
+	pendienteTexto: string;
+	// Cuántos aportes míos están esperando confirmación del cobrador.
+	pendienteConfirmacion: number;
+	pendienteConfirmacionTexto: string;
+};
+
+export async function listarGastosPorPersona(
+	supabase: SupabaseClient,
+	hogarId: string,
+	miId: string,
+	moneda: string
+): Promise<Map<string, { leDebo: GastoEnDeuda[]; meDebe: GastoEnDeuda[] }>> {
+	const fmt = fmtMonedaFactory(moneda);
+
+	const { data } = await supabase
+		.from('gastos_compartidos')
+		.select(
+			`id, titulo, fecha, pagador_id,
+			 gasto_divisiones (id, participante_id, monto, aportes (monto, estado))`
+		)
+		.eq('hogar_id', hogarId)
+		.order('fecha', { ascending: false })
+		.order('created_at', { ascending: false });
+
+	type AporteRow = { monto: number; estado: EstadoAporte };
+	type DivRow = {
+		id: string;
+		participante_id: string;
+		monto: number;
+		aportes: AporteRow[] | null;
+	};
+	type GastoRow = {
+		id: string;
+		titulo: string;
+		fecha: string;
+		pagador_id: string;
+		gasto_divisiones: DivRow[] | null;
+	};
+
+	const mapa = new Map<string, { leDebo: GastoEnDeuda[]; meDebe: GastoEnDeuda[] }>();
+	const asegurar = (otroId: string) => {
+		let r = mapa.get(otroId);
+		if (!r) {
+			r = { leDebo: [], meDebe: [] };
+			mapa.set(otroId, r);
+		}
+		return r;
+	};
+
+	for (const g of (data ?? []) as unknown as GastoRow[]) {
+		const fechaTexto = fmtFechaCorta(g.fecha);
+		for (const d of g.gasto_divisiones ?? []) {
+			const monto = Number(d.monto);
+			const aportes = d.aportes ?? [];
+			const sumPorEstado = (estados: Array<AporteRow['estado']>) =>
+				aportes
+					.filter((a) => estados.includes(a.estado))
+					.reduce((acc, a) => acc + Number(a.monto), 0);
+			const confirmado = sumPorEstado(['confirmado']);
+			const pendienteEnAportes = sumPorEstado(['pendiente']);
+
+			// Yo participo y le debo al pagador del gasto. Mi vista descuenta
+			// pendientes + confirmados (semántica asimétrica). La fila sigue
+			// apareciendo si tengo pendientes esperando confirmación, aunque
+			// el monto "neto a mi vista" sea 0 — para mostrar el estado.
+			if (d.participante_id === miId && g.pagador_id !== miId) {
+				const pendiente = Math.max(0, monto - confirmado - pendienteEnAportes);
+				if (pendiente <= 0.01 && pendienteEnAportes <= 0.01) continue;
+				asegurar(g.pagador_id).leDebo.push({
+					divisionId: d.id,
+					gastoId: g.id,
+					titulo: g.titulo,
+					fecha: g.fecha,
+					fechaTexto,
+					pendiente,
+					pendienteTexto: fmt.format(pendiente),
+					pendienteConfirmacion: pendienteEnAportes,
+					pendienteConfirmacionTexto:
+						pendienteEnAportes > 0 ? fmt.format(pendienteEnAportes) : ''
+				});
+				continue;
+			}
+			// Yo soy pagador del gasto y otro participa: me debe. Solo
+			// descuento aportes confirmados (los pendientes son promesas).
+			if (g.pagador_id === miId && d.participante_id !== miId) {
+				const pendiente = Math.max(0, monto - confirmado);
+				if (pendiente <= 0.01) continue;
+				asegurar(d.participante_id).meDebe.push({
+					divisionId: d.id,
+					gastoId: g.id,
+					titulo: g.titulo,
+					fecha: g.fecha,
+					fechaTexto,
+					pendiente,
+					pendienteTexto: fmt.format(pendiente),
+					pendienteConfirmacion: pendienteEnAportes,
+					pendienteConfirmacionTexto:
+						pendienteEnAportes > 0 ? fmt.format(pendienteEnAportes) : ''
+				});
+			}
+		}
+	}
+
+	return mapa;
+}
+
 export type ModoDivision = 'iguales' | 'porcentaje' | 'exacto' | 'partes';
+
+export type EstadoAporte = 'pendiente' | 'confirmado' | 'rechazado';
 
 export type Aporte = {
 	id: string;
@@ -132,6 +281,8 @@ export type Aporte = {
 	registradoPorId: string;
 	registradoPorNombre: string;
 	nota: string | null;
+	estado: EstadoAporte;
+	confirmadoAt: string | null;
 	createdAt: string;
 };
 
@@ -154,7 +305,11 @@ export type GastoDetalle = {
 		nombre: string;
 		avatar: string | null;
 		monto: number;
-		pagado: number; // suma de aportes para esta división
+		// Suma de aportes confirmados (cobrados de verdad).
+		pagadoConfirmado: number;
+		// Suma de aportes pendientes (lo que el deudor dice haber pagado
+		// pero el pagador todavía no confirma).
+		pagadoPendiente: number;
 		aportes: Aporte[];
 	}>;
 };
@@ -178,7 +333,7 @@ export async function cargarGasto(
 			 categorias (nombre, icono),
 			 gasto_divisiones (
 			   id, participante_id, monto,
-			   aportes (id, monto, fecha, registrado_por, nota, created_at)
+			   aportes (id, monto, fecha, registrado_por, nota, estado, confirmado_at, created_at)
 			 )`
 		)
 		.eq('id', gastoId)
@@ -191,6 +346,8 @@ export async function cargarGasto(
 		fecha: string;
 		registrado_por: string;
 		nota: string | null;
+		estado: EstadoAporte;
+		confirmado_at: string | null;
 		created_at: string;
 	};
 	type DivRow = {
@@ -220,17 +377,25 @@ export async function cargarGasto(
 		divisiones: divFilas.map((d) => {
 			const p = perfiles.get(d.participante_id);
 			// Aportes pueden venir desordenados; ordeno por created_at asc para el
-			// historial cronológico.
+			// historial cronológico. Los rechazados desaparecen del historial.
 			const ap = (d.aportes ?? [])
+				.filter((a) => a.estado !== 'rechazado')
 				.slice()
 				.sort((a, b) => a.created_at.localeCompare(b.created_at));
+			const pagadoConfirmado = ap
+				.filter((a) => a.estado === 'confirmado')
+				.reduce((acc, x) => acc + Number(x.monto), 0);
+			const pagadoPendiente = ap
+				.filter((a) => a.estado === 'pendiente')
+				.reduce((acc, x) => acc + Number(x.monto), 0);
 			return {
 				id: d.id,
 				participanteId: d.participante_id,
 				nombre: p?.display_name || 'Sin nombre',
 				avatar: p?.avatar_url || null,
 				monto: Number(d.monto),
-				pagado: ap.reduce((acc, x) => acc + Number(x.monto), 0),
+				pagadoConfirmado,
+				pagadoPendiente,
 				aportes: ap.map((a) => ({
 					id: a.id,
 					divisionId: d.id,
@@ -240,6 +405,8 @@ export async function cargarGasto(
 					registradoPorNombre:
 						perfiles.get(a.registrado_por)?.display_name || 'Sin nombre',
 					nota: a.nota,
+					estado: a.estado,
+					confirmadoAt: a.confirmado_at,
 					createdAt: a.created_at
 				}))
 			};

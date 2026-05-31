@@ -43,38 +43,84 @@
 
 	const colorSaldo = (n: number) =>
 		n > 0.01 ? 'text-money-favor' : n < -0.01 ? 'text-money-contra' : 'text-text';
-	const signo = (n: number) => (n > 0.01 ? '+ ' : n < -0.01 ? '− ' : '');
 
-	// === Modal "Registrar pago" =============================================
-	// Se abre con un click en "Saldar X" en una fila de persona en la lista.
-	// Pre-llena el monto al saldo absoluto que le debo (atajo "saldar todo").
-	let modalAbierto = $state(false);
-	let receptor = $state<{ id: string; nombre: string; avatar: string | null } | null>(null);
-	let pagoMonto = $state<number | null>(null);
-	let pagoNota = $state('');
+	// Flatten: una fila por gasto-deuda, no agrupada por persona. Cada fila
+	// lleva el id real de la división (lo que el action de abonar necesita).
+	type FilaDeuda = {
+		divisionId: string;
+		gastoId: string;
+		gastoTitulo: string;
+		fechaTexto: string;
+		otroId: string;
+		otroNombre: string;
+		otroAvatar: string | null;
+		pendiente: number;
+		pendienteTexto: string;
+		pendienteConfirmacion: number;
+		pendienteConfirmacionTexto: string;
+	};
+
+	const filasLeDebo = $derived<FilaDeuda[]>(
+		resumen.personas.flatMap((p) =>
+			p.leDebo.map((d) => ({
+				divisionId: d.divisionId,
+				gastoId: d.gastoId,
+				gastoTitulo: d.titulo,
+				fechaTexto: d.fechaTexto,
+				otroId: p.id,
+				otroNombre: p.nombre,
+				otroAvatar: p.avatar,
+				pendiente: d.pendiente,
+				pendienteTexto: d.pendienteTexto,
+				pendienteConfirmacion: d.pendienteConfirmacion,
+				pendienteConfirmacionTexto: d.pendienteConfirmacionTexto
+			}))
+		)
+	);
+	const filasMeDeben = $derived<FilaDeuda[]>(
+		resumen.personas.flatMap((p) =>
+			p.meDebe.map((d) => ({
+				divisionId: d.divisionId,
+				gastoId: d.gastoId,
+				gastoTitulo: d.titulo,
+				fechaTexto: d.fechaTexto,
+				otroId: p.id,
+				otroNombre: p.nombre,
+				otroAvatar: p.avatar,
+				pendiente: d.pendiente,
+				pendienteTexto: d.pendienteTexto,
+				pendienteConfirmacion: d.pendienteConfirmacion,
+				pendienteConfirmacionTexto: d.pendienteConfirmacionTexto
+			}))
+		)
+	);
+
+	// === Abonar inline a una deuda específica ===============================
+	// Una fila a la vez. El abono crea un aporte pendiente contra la división.
+	let abonandoDivisionId = $state<string | null>(null);
+	let aporteMonto = $state<number | null>(null);
 	let procesando = $state(false);
-	let errorPago = $state<string | null>(null);
+	let errorAbono = $state<string | null>(null);
 
-	function abrirSaldar(p: { id: string; nombre: string; avatar: string | null; saldo: number }) {
-		receptor = { id: p.id, nombre: p.nombre, avatar: p.avatar };
-		pagoMonto = Math.abs(p.saldo); // atajo: saldar todo
-		pagoNota = '';
-		errorPago = null;
-		modalAbierto = true;
-	}
-	function cerrarModal() {
+	function abrirAbonar(f: FilaDeuda) {
 		if (procesando) return;
-		modalAbierto = false;
-		receptor = null;
+		abonandoDivisionId = f.divisionId;
+		aporteMonto = f.pendiente;
+		errorAbono = null;
+	}
+	function cerrarAbonar() {
+		if (procesando) return;
+		abonandoDivisionId = null;
+		errorAbono = null;
 	}
 
-	function onEnhanceRegistrar({ cancel }: { cancel: () => void }) {
+	function onEnhanceAbonar({ cancel }: { cancel: () => void }) {
 		if (procesando) {
 			cancel();
 			return;
 		}
 		procesando = true;
-		errorPago = null;
+		errorAbono = null;
 		return async ({
 			result,
 			update
@@ -86,10 +132,9 @@
 				if (result.type === 'success') {
 					await update({ invalidateAll: false });
 					await invalidate('app:inicio');
-					modalAbierto = false;
-					receptor = null;
+					abonandoDivisionId = null;
 				} else {
-					errorPago = result.data?.error || 'No se pudo registrar el pago.';
+					errorAbono = result.data?.error || 'No se pudo registrar el abono.';
 				}
 			} finally {
 				procesando = false;
@@ -97,8 +142,7 @@
 		};
 	}
 
-	// Handler genérico para las acciones de un pago pendiente (confirmar /
-	// rechazar / borrar). Mientras la acción está en vuelo, bloqueamos todo.
+	// Acciones de pagos pendientes (confirmar / rechazar / borrar).
 	let procesandoPago = $state<string | null>(null);
 	function onEnhancePagoAccion(pagoId: string) {
 		return ({ cancel }: { cancel: () => void }) => {
@@ -195,7 +239,7 @@
 		>
 			<p class="text-sm text-muted">Tu saldo</p>
 			<p class={'tabular mt-1 text-4xl font-bold ' + colorSaldo(resumen.saldoNeto)}>
-				{signo(resumen.saldoNeto)}{fmt(Math.abs(resumen.saldoNeto))}
+				{resumen.saldoNeto < -0.01 ? '− ' : ''}{fmt(Math.abs(resumen.saldoNeto))}
 			</p>
 			<p class="mt-1 text-sm text-muted">
 				{#if Math.abs(resumen.saldoNeto) <= 0.01}
@@ -219,7 +263,7 @@
 		</div>
 	</section>
 
-	<!-- Pagos pendientes (donde tengo que confirmar / cancelar) -->
+	<!-- Pagos pendientes (confirmar / cancelar pagos genéricos) -->
 	{#if pagosRecibir.length > 0 || pagosEnviados.length > 0}
 		<section class="mt-6">
 			<h2 class="text-sm font-semibold text-text">Pagos pendientes</h2>
@@ -334,12 +378,172 @@
 		</section>
 	{/if}
 
-	<!-- Por persona -->
-	<section class="mt-6 flex flex-col lg:min-h-0 lg:flex-1">
-		<h2 class="text-sm font-semibold text-text">Por persona</h2>
-		{#if resumen.personas.length === 0}
+	<!-- Lo que debés — una fila por gasto -->
+	{#if filasLeDebo.length > 0}
+		<section class="mt-6">
+			<h2 class="text-sm font-semibold text-text">Debes</h2>
+			<ul class="mt-3 flex flex-col gap-2">
+				{#each filasLeDebo as f (f.divisionId)}
+					{@const enAbonar = abonandoDivisionId === f.divisionId}
+					{@const totalmenteCubierto =
+						f.pendiente <= 0.01 && f.pendienteConfirmacion > 0.01}
+					<li class="rounded-card border border-border bg-surface shadow-card">
+						<div class="flex items-center gap-3 p-4">
+							{#if f.otroAvatar}
+								<img
+									src={f.otroAvatar}
+									alt=""
+									referrerpolicy="no-referrer"
+									class="size-10 shrink-0 rounded-full object-cover"
+								/>
+							{:else}
+								<span
+									class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
+								>
+									{iniciales(f.otroNombre)}
+								</span>
+							{/if}
+							<div class="min-w-0 flex-1">
+								<p class="truncate text-sm font-medium text-text">{f.gastoTitulo}</p>
+								<p class="truncate text-xs text-muted">
+									a {f.otroNombre} · {f.fechaTexto}
+								</p>
+								{#if f.pendienteConfirmacion > 0.01}
+									<p class="mt-0.5 text-xs text-warning">
+										{f.pendienteConfirmacionTexto} esperando confirmación
+									</p>
+								{/if}
+							</div>
+							{#if totalmenteCubierto}
+								<span class="tabular shrink-0 text-sm font-semibold text-warning">
+									pendiente
+								</span>
+							{:else}
+								<span class="tabular shrink-0 text-sm font-semibold text-money-contra">
+									{f.pendienteTexto}
+								</span>
+								{#if !enAbonar}
+									<button
+										type="button"
+										onclick={() => abrirAbonar(f)}
+										disabled={procesando}
+										class="flex h-9 shrink-0 items-center justify-center gap-1 rounded-input bg-brand-500 px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+										aria-label="Abonar a {f.gastoTitulo}"
+									>
+										<HandCoins size={14} />
+										Abonar
+									</button>
+								{/if}
+							{/if}
+						</div>
+
+						{#if enAbonar}
+							<form
+								method="POST"
+								action="?/registrarAporte"
+								use:enhance={onEnhanceAbonar}
+								class="space-y-3 border-t border-border bg-brand-50/40 px-4 py-3"
+							>
+								<input type="hidden" name="division_id" value={f.divisionId} />
+								<div class="space-y-1.5">
+									<label
+										for="abono-monto-{f.divisionId}"
+										class="block text-xs font-medium text-text"
+									>
+										Cuánto abonas
+										<span class="font-normal text-muted">· te falta {f.pendienteTexto}</span>
+									</label>
+									<input
+										id="abono-monto-{f.divisionId}"
+										name="monto"
+										type="number"
+										required
+										min="0.01"
+										max={f.pendiente}
+										step="any"
+										inputmode="decimal"
+										placeholder="0"
+										disabled={procesando}
+										bind:value={aporteMonto}
+										class="tabular w-full rounded-input border border-transparent bg-surface px-3 py-2 text-sm text-text outline-none disabled:opacity-60"
+									/>
+								</div>
+
+								{#if errorAbono}
+									<p class="rounded-input bg-money-contra-bg px-3 py-2 text-xs text-money-contra">
+										{errorAbono}
+									</p>
+								{/if}
+
+								<div class="flex gap-2">
+									<button
+										type="button"
+										onclick={cerrarAbonar}
+										disabled={procesando}
+										class="flex h-9 flex-1 items-center justify-center rounded-input border border-border bg-surface text-xs font-semibold text-text transition-colors hover:bg-bg disabled:opacity-50"
+									>
+										Cancelar
+									</button>
+									<button
+										type="submit"
+										disabled={procesando || !aporteMonto || aporteMonto <= 0}
+										class="flex h-9 flex-[1.4] items-center justify-center gap-1.5 rounded-input bg-brand-500 text-xs font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+									>
+										<HandCoins size={14} />
+										{procesando ? 'Registrando…' : 'Registrar abono'}
+									</button>
+								</div>
+							</form>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
+	<!-- Lo que te deben — una fila por gasto -->
+	{#if filasMeDeben.length > 0}
+		<section class="mt-6">
+			<h2 class="text-sm font-semibold text-text">Te deben</h2>
+			<ul class="mt-3 flex flex-col gap-2">
+				{#each filasMeDeben as f (f.divisionId)}
+					<li class="rounded-card border border-border bg-surface shadow-card">
+						<div class="flex items-center gap-3 p-4">
+							{#if f.otroAvatar}
+								<img
+									src={f.otroAvatar}
+									alt=""
+									referrerpolicy="no-referrer"
+									class="size-10 shrink-0 rounded-full object-cover"
+								/>
+							{:else}
+								<span
+									class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
+								>
+									{iniciales(f.otroNombre)}
+								</span>
+							{/if}
+							<div class="min-w-0 flex-1">
+								<p class="truncate text-sm font-medium text-text">{f.gastoTitulo}</p>
+								<p class="truncate text-xs text-muted">
+									{f.otroNombre} · {f.fechaTexto}
+								</p>
+							</div>
+							<span class="tabular shrink-0 text-sm font-semibold text-money-favor">
+								{f.pendienteTexto}
+							</span>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
+	<!-- Estado cero: sin deudas en ninguna dirección -->
+	{#if filasLeDebo.length === 0 && filasMeDeben.length === 0}
+		<section class="mt-6 flex flex-col lg:min-h-0 lg:flex-1">
 			<div
-				class="mt-3 flex flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface px-6 py-14 text-center lg:flex-1 lg:min-h-0"
+				class="flex flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface px-6 py-14 text-center lg:flex-1 lg:min-h-0"
 			>
 				<span
 					class="mx-auto flex size-14 items-center justify-center rounded-full bg-brand-50 text-brand-700"
@@ -348,8 +552,8 @@
 				</span>
 				<p class="mt-4 font-medium text-text">Todo en cero</p>
 				<p class="mt-1 max-w-sm text-sm text-muted">
-					Cuando haya gastos pendientes donde alguien deba algo, aquí verás cuánto te deben y a
-					quién le debes, ya neteado por persona.
+					Cuando haya gastos pendientes donde alguien deba algo, aquí verás cada uno en su propia
+					fila.
 				</p>
 				<a
 					href="/gastos"
@@ -359,147 +563,6 @@
 					Ir a Gastos
 				</a>
 			</div>
-		{:else}
-			<ul class="mt-3 grid gap-2 sm:grid-cols-2">
-				{#each resumen.personas as p (p.id)}
-					<li
-						class="flex items-center gap-3 rounded-card border border-border bg-surface p-4 shadow-card"
-					>
-						{#if p.avatar}
-							<img
-								src={p.avatar}
-								alt=""
-								referrerpolicy="no-referrer"
-								class="size-10 shrink-0 rounded-full object-cover"
-							/>
-						{:else}
-							<span
-								class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
-							>
-								{iniciales(p.nombre)}
-							</span>
-						{/if}
-						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium text-text">{p.nombre}</p>
-							<p class={'text-xs ' + (p.saldo > 0 ? 'text-money-favor' : 'text-money-contra')}>
-								{p.saldo > 0 ? 'Te debe' : 'Le debes'}
-							</p>
-						</div>
-						<span class={'tabular shrink-0 font-semibold ' + colorSaldo(p.saldo)}>
-							{signo(p.saldo)}{fmt(Math.abs(p.saldo))}
-						</span>
-						{#if p.saldo < -0.01}
-							<button
-								type="button"
-								onclick={() => abrirSaldar(p)}
-								class="flex h-9 shrink-0 items-center justify-center gap-1 rounded-input bg-brand-500 px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-700"
-								aria-label="Saldar deuda con {p.nombre}"
-							>
-								<HandCoins size={14} />
-								Saldar
-							</button>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
+		</section>
+	{/if}
 </div>
-
-<!-- Modal: registrar un pago saliente -->
-{#if modalAbierto && receptor}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-text/60 p-4"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Registrar pago"
-	>
-		<button
-			type="button"
-			class="absolute inset-0 cursor-default"
-			onclick={cerrarModal}
-			aria-label="Cerrar"
-		></button>
-		<div class="animate-fade-in relative w-full max-w-md rounded-modal bg-surface shadow-2xl">
-			<header class="flex items-start justify-between gap-3 border-b border-border px-6 py-4">
-				<div class="min-w-0">
-					<h2 class="text-base font-bold text-text">Registrar pago</h2>
-					<p class="mt-0.5 text-xs text-muted">
-						A {receptor.nombre}. Quedará pendiente hasta que confirme.
-					</p>
-				</div>
-				<button
-					type="button"
-					onclick={cerrarModal}
-					disabled={procesando}
-					class="flex size-8 shrink-0 items-center justify-center rounded-input text-muted transition-colors hover:bg-bg hover:text-text disabled:opacity-50"
-					aria-label="Cerrar"
-				>
-					<X size={18} />
-				</button>
-			</header>
-
-			<form method="POST" action="?/registrarPago" use:enhance={onEnhanceRegistrar} class="space-y-4 px-6 py-5">
-				<input type="hidden" name="receptor_id" value={receptor.id} />
-
-				<div class="space-y-1.5">
-					<label for="pago-monto" class="block text-sm font-medium text-text">Monto</label>
-					<input
-						id="pago-monto"
-						name="monto"
-						type="number"
-						required
-						min="0.01"
-						step="any"
-						inputmode="decimal"
-						placeholder="0"
-						disabled={procesando}
-						bind:value={pagoMonto}
-						class="tabular w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70 disabled:opacity-60"
-					/>
-				</div>
-
-				<div class="space-y-1.5">
-					<label for="pago-nota" class="block text-sm font-medium text-text">
-						Nota <span class="font-normal text-muted">(opcional)</span>
-					</label>
-					<input
-						id="pago-nota"
-						name="nota"
-						type="text"
-						maxlength="120"
-						placeholder="Transferencia, efectivo…"
-						disabled={procesando}
-						bind:value={pagoNota}
-						class="w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70 disabled:opacity-60"
-					/>
-				</div>
-
-				{#if errorPago}
-					<p class="rounded-input bg-money-contra-bg px-3 py-2 text-sm text-money-contra">
-						{errorPago}
-					</p>
-				{/if}
-
-				<div class="flex gap-2 pt-1">
-					<button
-						type="button"
-						onclick={cerrarModal}
-						disabled={procesando}
-						class="flex h-11 flex-1 items-center justify-center rounded-input border border-border bg-surface text-sm font-semibold text-text transition-colors hover:bg-bg disabled:opacity-50"
-					>
-						Cancelar
-					</button>
-					<button
-						type="submit"
-						disabled={procesando || !pagoMonto || pagoMonto <= 0}
-						class="flex h-11 flex-[1.4] items-center justify-center gap-2 rounded-input bg-brand-500 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
-					>
-						<HandCoins size={16} />
-						{procesando ? 'Registrando…' : 'Registrar pago'}
-					</button>
-				</div>
-			</form>
-		</div>
-	</div>
-{/if}

@@ -26,6 +26,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import StickyNote from '@lucide/svelte/icons/sticky-note';
 	import Check from '@lucide/svelte/icons/check';
+	import XIcon from '@lucide/svelte/icons/x';
 	import HandCoins from '@lucide/svelte/icons/hand-coins';
 	import History from '@lucide/svelte/icons/history';
 	import type { GastoDetalle as GastoDetalleData } from '$lib/server/gastos';
@@ -144,10 +145,25 @@
 	const labelClass =
 		'flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted uppercase';
 
-	function estadoPago(d: { monto: number; pagado: number }) {
-		const pendiente = Math.max(0, d.monto - d.pagado);
-		if (pendiente <= 0.01) return 'pagado' as const;
-		if (d.pagado > 0.01) return 'parcial' as const;
+	// Estado mostrado por participante:
+	//   * 'pagado'      → ya está todo confirmado (cerrado).
+	//   * 'esperando'   → cubrió todo con pendientes, espera confirmación.
+	//   * 'parcial'     → cubrió algo pero falta.
+	//   * 'pendiente'   → no cubrió nada.
+	function estadoPago(d: {
+		monto: number;
+		pagadoConfirmado: number;
+		pagadoPendiente: number;
+	}) {
+		const cubierto = d.pagadoConfirmado + d.pagadoPendiente;
+		const faltante = Math.max(0, d.monto - cubierto);
+		if (faltante <= 0.01) {
+			if (d.pagadoPendiente > 0.01 && d.pagadoConfirmado < d.monto - 0.01) {
+				return 'esperando' as const;
+			}
+			return 'pagado' as const;
+		}
+		if (cubierto > 0.01) return 'parcial' as const;
 		return 'pendiente' as const;
 	}
 
@@ -187,8 +203,19 @@
 	const miDivision = $derived(
 		divisionesEfectivas.find((d) => d.participanteId === yo) ?? null
 	);
+	// Si yo soy a la vez participante y pagador de este gasto, mi parte queda
+	// saldada al instante (la pagué cuando armé el gasto). En caso normal,
+	// pendienteMio = mi parte − (mis aportes confirmados + mis pendientes).
+	// Los pendientes míos ya descuentan en mi vista (semántica asimétrica).
 	const pendienteMio = $derived(
-		miDivision ? Math.max(0, miDivision.monto - miDivision.pagado) : 0
+		miDivision
+			? esMio
+				? 0
+				: Math.max(
+						0,
+						miDivision.monto - miDivision.pagadoConfirmado - miDivision.pagadoPendiente
+					)
+			: 0
 	);
 
 	const historial = $derived.by(() => {
@@ -203,8 +230,15 @@
 		return desdeServer.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 	});
 
-	const totalPagado = $derived(divisionesEfectivas.reduce((acc, d) => acc + d.pagado, 0));
-	const totalPendiente = $derived(Math.max(0, (vista?.monto ?? 0) - totalPagado));
+	const totalConfirmado = $derived(
+		divisionesEfectivas.reduce((acc, d) => acc + d.pagadoConfirmado, 0)
+	);
+	const totalEsperando = $derived(
+		divisionesEfectivas.reduce((acc, d) => acc + d.pagadoPendiente, 0)
+	);
+	const totalPendiente = $derived(
+		Math.max(0, (vista?.monto ?? 0) - totalConfirmado - totalEsperando)
+	);
 
 	const cargandoDetalle = $derived(!gasto && !!fallback);
 
@@ -323,7 +357,7 @@
 							<h1 class="text-xl font-bold text-text">{vista.titulo}</h1>
 							<p class="tabular mt-1 text-4xl font-bold text-text">{fmt(vista.monto)}</p>
 							<p class="mt-2 text-xs text-muted">
-								{fmt(totalPagado)} pagado · {fmt(totalPendiente)} pendiente
+								{fmt(totalConfirmado)} cobrado{#if totalEsperando > 0.01} · {fmt(totalEsperando)} por confirmar{/if} · {fmt(totalPendiente)} pendiente
 							</p>
 						</div>
 						{#if esMio && !cargandoDetalle}
@@ -484,9 +518,15 @@
 						<ul class="mt-2 overflow-hidden rounded-card bg-surface shadow-card lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
 							{#each divisionesEfectivas as d, i (d.id)}
 								{@const esYo = d.participanteId === yo}
-								{@const pendiente = Math.max(0, d.monto - d.pagado)}
-								{@const est = estadoPago(d)}
-								{@const pct = d.monto > 0 ? Math.min(100, (d.pagado / d.monto) * 100) : 0}
+								{@const esPagador = d.participanteId === vista.pagadorId}
+								{@const cubierto = d.pagadoConfirmado + d.pagadoPendiente}
+								{@const pendiente = esPagador ? 0 : Math.max(0, d.monto - cubierto)}
+								{@const est = esPagador ? 'pagado' : estadoPago(d)}
+								{@const pct = esPagador
+									? 100
+									: d.monto > 0
+										? Math.min(100, (cubierto / d.monto) * 100)
+										: 0}
 								<li
 									class="flex items-center gap-3 px-4 py-3"
 									class:border-t={i > 0}
@@ -516,7 +556,13 @@
 													class="inline-flex shrink-0 items-center gap-1 rounded-full bg-money-favor-bg px-2 py-0.5 text-xs font-medium text-money-favor"
 												>
 													<Check size={11} strokeWidth={3} />
-													Pagado
+													{esPagador ? 'Pagada' : 'Pagado'}
+												</span>
+											{:else if est === 'esperando'}
+												<span
+													class="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning"
+												>
+													Pendiente de confirmar
 												</span>
 											{:else if est === 'parcial'}
 												<span
@@ -533,8 +579,13 @@
 											{/if}
 										</div>
 										<p class="tabular mt-0.5 text-xs text-muted">
-											{fmt(d.pagado)} / {fmt(d.monto)}
-											{#if est !== 'pagado'}· falta {fmt(pendiente)}{/if}
+											{#if esPagador}
+												{fmt(d.monto)} · la pagaste tú
+											{:else}
+												{fmt(cubierto)} / {fmt(d.monto)}
+												{#if est === 'esperando'}· {fmt(d.pagadoPendiente)} esperando
+												{:else if est !== 'pagado'}· falta {fmt(pendiente)}{/if}
+											{/if}
 										</p>
 										<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-bg">
 											<div
@@ -667,6 +718,7 @@
 					{:else}
 						<ul class="mt-2 overflow-hidden rounded-card bg-surface shadow-card lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
 							{#each historial as a, i (a.id)}
+								{@const espera = a.estado === 'pendiente'}
 								<li
 									class="flex items-center gap-3 px-4 py-3"
 									class:border-t={i > 0}
@@ -691,11 +743,49 @@
 											{a.participanteId === yo ? 'Tú' : a.participanteNombre}
 											<span class="text-muted"> · {fmtFechaCorta(a.fecha)}</span>
 										</p>
+										{#if espera}
+											<p class="mt-0.5 text-xs text-warning">Esperando confirmación</p>
+										{/if}
 									</div>
-									<span class="tabular shrink-0 text-sm font-semibold text-money-favor">
+									<span
+										class={'tabular shrink-0 text-sm font-semibold ' +
+											(espera ? 'text-warning' : 'text-money-favor')}
+									>
 										+{fmt(a.monto)}
 									</span>
-									{#if puedoBorrar(a)}
+									{#if espera && esMio}
+										<form
+											method="POST"
+											action={`/gastos/${gastoId}?/confirmarAporte`}
+											use:enhance={onEnhanceBorrarAporte(a.id)}
+										>
+											<input type="hidden" name="id" value={a.id} />
+											<button
+												type="submit"
+												disabled={procesando}
+												class="flex h-8 shrink-0 items-center justify-center gap-1 rounded-input bg-money-favor px-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+												aria-label="Confirmar aporte"
+											>
+												<Check size={12} strokeWidth={3} />
+												Confirmar
+											</button>
+										</form>
+										<form
+											method="POST"
+											action={`/gastos/${gastoId}?/rechazarAporte`}
+											use:enhance={onEnhanceBorrarAporte(a.id)}
+										>
+											<input type="hidden" name="id" value={a.id} />
+											<button
+												type="submit"
+												disabled={procesando}
+												class="flex size-8 shrink-0 items-center justify-center rounded-input text-muted transition-colors hover:bg-money-contra-bg hover:text-money-contra disabled:opacity-40"
+												aria-label="Rechazar aporte"
+											>
+												<XIcon size={14} />
+											</button>
+										</form>
+									{:else if puedoBorrar(a)}
 										<form
 											method="POST"
 											action={`/gastos/${gastoId}?/borrarAporte`}

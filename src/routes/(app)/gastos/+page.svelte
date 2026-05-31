@@ -296,10 +296,18 @@
 							<!-- Monto + mi parte -->
 							<div class="shrink-0 text-right">
 								<p class="tabular font-semibold text-text">{g.montoTexto}</p>
-								{#if g.miParte > 0}
-									<p class="tabular mt-0.5 text-xs text-muted">tu parte {g.miParteTexto}</p>
-								{:else}
+								{#if g.miParte <= 0}
 									<p class="mt-0.5 text-xs text-muted">no participas</p>
+								{:else if g.esMio}
+									<p class="tabular mt-0.5 text-xs text-money-favor">tu parte pagada</p>
+								{:else if g.miPendiente <= 0.01 && g.miPorConfirmar > 0.01}
+									<p class="tabular mt-0.5 text-xs text-warning">pendiente de confirmar</p>
+								{:else if g.miPendiente <= 0.01}
+									<p class="tabular mt-0.5 text-xs text-money-favor">tu parte saldada</p>
+								{:else}
+									<p class="tabular mt-0.5 text-xs text-muted">
+										te falta {g.miPendienteTexto}
+									</p>
 								{/if}
 							</div>
 

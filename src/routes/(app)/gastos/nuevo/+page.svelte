@@ -39,7 +39,9 @@
 	const hoyIso = new Date().toISOString().slice(0, 10);
 
 	let titulo = $state('');
-	let monto = $state(0);
+	let monto = $state<number | null>(null);
+	// Versión numérica saneada para todos los cálculos internos (siempre 0 si está vacío).
+	const montoNum = $derived(monto ?? 0);
 	let fecha = $state(hoyIso);
 	let categoriaId = $state<string>('');
 	let modo = $state<'iguales' | 'porcentaje' | 'exacto' | 'partes'>('iguales');
@@ -78,10 +80,10 @@
 	function dividirIguales() {
 		const n = activos.length;
 		if (n === 0) return [];
-		const cents = Math.floor((monto * 100) / n);
+		const cents = Math.floor((montoNum * 100) / n);
 		const arr = activos.map((id) => ({ participante_id: id, monto: cents / 100 }));
 		const totalCents = cents * n;
-		const remainder = Math.round(monto * 100) - totalCents;
+		const remainder = Math.round(montoNum * 100) - totalCents;
 		if (remainder !== 0) arr[0].monto = (cents + remainder) / 100;
 		return arr;
 	}
@@ -90,11 +92,11 @@
 		let totalCents = 0;
 		for (const id of activos) {
 			const pct = Number(estado[id].valor || '0');
-			const mt = Math.round(((monto * pct) / 100) * 100) / 100;
+			const mt = Math.round(((montoNum * pct) / 100) * 100) / 100;
 			arr.push({ participante_id: id, monto: mt });
 			totalCents += Math.round(mt * 100);
 		}
-		const target = Math.round(monto * 100);
+		const target = Math.round(montoNum * 100);
 		const remainder = (target - totalCents) / 100;
 		if (arr.length && remainder !== 0) {
 			arr[0].monto = Math.round((arr[0].monto + remainder) * 100) / 100;
@@ -114,11 +116,11 @@
 		const arr: Array<{ participante_id: string; monto: number }> = [];
 		let totalCents = 0;
 		for (let i = 0; i < activos.length; i++) {
-			const mt = Math.round(((monto * partes[i]) / total) * 100) / 100;
+			const mt = Math.round(((montoNum * partes[i]) / total) * 100) / 100;
 			arr.push({ participante_id: activos[i], monto: mt });
 			totalCents += Math.round(mt * 100);
 		}
-		const target = Math.round(monto * 100);
+		const target = Math.round(montoNum * 100);
 		const remainder = (target - totalCents) / 100;
 		if (arr.length && remainder !== 0) {
 			arr[0].monto = Math.round((arr[0].monto + remainder) * 100) / 100;
@@ -127,7 +129,7 @@
 	}
 
 	const divisiones = $derived.by(() => {
-		if (activos.length === 0 || !Number.isFinite(monto) || monto <= 0) return [];
+		if (activos.length === 0 || montoNum <= 0) return [];
 		if (modo === 'iguales') return dividirIguales();
 		if (modo === 'porcentaje') return dividirPorcentaje();
 		if (modo === 'exacto') return dividirExacto();
@@ -137,10 +139,11 @@
 
 	const sumaDivisiones = $derived(divisiones.reduce((a, b) => a + b.monto, 0));
 	const diferencia = $derived(
-		Math.abs(sumaDivisiones - monto) <= 0.01 ? 0 : monto - sumaDivisiones
+		Math.abs(sumaDivisiones - montoNum) <= 0.01 ? 0 : montoNum - sumaDivisiones
 	);
 	const valido = $derived(
 		titulo.trim().length > 0 &&
+			monto !== null &&
 			Number.isFinite(monto) &&
 			monto > 0 &&
 			activos.length > 0 &&
@@ -392,8 +395,8 @@
 						<p class="tabular text-xs text-muted">
 							{#if modo === 'iguales'}
 								{activos.length} {activos.length === 1 ? 'persona' : 'personas'}
-							{:else if monto > 0}
-								{fmt(sumaDivisiones)} / {fmt(monto)}
+							{:else if montoNum > 0}
+								{fmt(sumaDivisiones)} / {fmt(montoNum)}
 							{/if}
 						</p>
 					</div>
@@ -433,7 +436,7 @@
 										</p>
 										{#if !e.activo}
 											<p class="mt-0.5 text-xs text-muted">No incluido</p>
-										{:else if modo !== 'iguales' && monto > 0}
+										{:else if modo !== 'iguales' && montoNum > 0}
 											<p class="tabular mt-0.5 text-xs text-muted">
 												Parte: {fmt(
 													divisiones.find((d) => d.participante_id === m.userId)?.monto ?? 0
@@ -491,7 +494,7 @@
 							</li>
 						{/each}
 					</ul>
-					{#if diferencia !== 0 && activos.length > 0 && monto > 0}
+					{#if diferencia !== 0 && activos.length > 0 && montoNum > 0}
 						<p class="mt-2 text-xs text-money-contra">
 							{#if diferencia > 0}Falta {fmt(diferencia)} para llegar al total.{:else}Te
 								excediste {fmt(-diferencia)} sobre el total.{/if}

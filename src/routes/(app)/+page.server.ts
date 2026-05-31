@@ -1,6 +1,10 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { type PerfilMin } from '$lib/server/gastos';
+import {
+	type PerfilMin,
+	listarGastosPorPersona,
+	type GastoEnDeuda
+} from '$lib/server/gastos';
 import { listarPagos, type PagoVista } from '$lib/server/pagos';
 import { elegirHogarActivo, listarHogares } from '$lib/server/hogares';
 
@@ -12,6 +16,9 @@ export type SaldoPorPersona = {
 	nombre: string;
 	avatar: string | null;
 	saldo: number;
+	// Desglose: cuáles gastos componen lo que le debo / me debe a esta persona.
+	leDebo: GastoEnDeuda[];
+	meDebe: GastoEnDeuda[];
 };
 
 export type ResumenInicio = {
@@ -36,20 +43,24 @@ export const load: PageServerLoad = async ({
 		miembros.map((m) => [m.userId, { display_name: m.nombre, avatar_url: m.avatar }])
 	);
 
-	// Balance y pagos en paralelo (no dependen entre sí).
-	const [balanceRes, pagos] = await Promise.all([
+	// Balance, pagos y desglose por persona en paralelo (no dependen entre sí).
+	const [balanceRes, pagos, desglosePorPersona] = await Promise.all([
 		supabase.rpc('balance_hogar', { p_hogar: hogarActivo.id }),
-		listarPagos(supabase, hogarActivo.id, perfiles, hogarActivo.moneda)
+		listarPagos(supabase, hogarActivo.id, perfiles, hogarActivo.moneda),
+		listarGastosPorPersona(supabase, hogarActivo.id, user.id, hogarActivo.moneda)
 	]);
 
 	const filas = (balanceRes.data ?? []) as Array<{ otro_id: string; saldo: number | string }>;
 	const pares = filas.map((f) => {
 		const m = miembros.find((mm) => mm.userId === f.otro_id);
+		const desglose = desglosePorPersona.get(f.otro_id);
 		return {
 			id: f.otro_id,
 			nombre: m?.nombre || 'Sin nombre',
 			avatar: m?.avatar ?? null,
-			saldo: Number(f.saldo)
+			saldo: Number(f.saldo),
+			leDebo: desglose?.leDebo ?? [],
+			meDebe: desglose?.meDebe ?? []
 		} satisfies SaldoPorPersona;
 	});
 
@@ -84,6 +95,44 @@ export const load: PageServerLoad = async ({
 };
 
 export const actions: Actions = {
+	// Registrar un aporte contra una división concreta de un gasto. Como soy
+	// el deudor (participante), queda en estado=pendiente hasta que el pagador
+	// del gasto confirme.
+	registrarAporte: async ({ request, locals: { supabase, user } }) => {
+		if (!user) redirect(303, '/login');
+
+		const fd = await request.formData();
+		const divisionId = String(fd.get('division_id') ?? '').trim();
+		const montoStr = String(fd.get('monto') ?? '').trim().replace(',', '.');
+
+		if (!divisionId) return fail(400, { error: 'Falta la deuda.' });
+		const monto = Number(montoStr);
+		if (!Number.isFinite(monto) || monto <= 0) {
+			return fail(400, { error: 'Monto inválido.' });
+		}
+
+		// Solo el participante de la división puede abonar desde aquí.
+		const { data: div } = await supabase
+			.from('gasto_divisiones')
+			.select('id, participante_id, monto')
+			.eq('id', divisionId)
+			.maybeSingle();
+		if (!div || div.participante_id !== user.id) {
+			return fail(403, { error: 'No puedes abonar a esta deuda.' });
+		}
+
+		const { error } = await supabase.from('aportes').insert({
+			division_id: divisionId,
+			monto,
+			fecha: new Date().toISOString().slice(0, 10),
+			registrado_por: user.id,
+			estado: 'pendiente'
+		});
+
+		if (error) return fail(400, { error: error.message });
+		return { ok: true };
+	},
+
 	// Registrar un pago saliente (yo le pago a otro). Queda en estado=pendiente
 	// hasta que el receptor confirme.
 	registrarPago: async ({ request, locals: { supabase, user }, cookies }) => {
@@ -98,7 +147,7 @@ export const actions: Actions = {
 		const nota = String(fd.get('nota') ?? '').trim() || null;
 
 		if (!receptorId) return fail(400, { error: 'Falta el receptor.' });
-		if (receptorId === user.id) return fail(400, { error: 'No te podés pagar a vos mismo.' });
+		if (receptorId === user.id) return fail(400, { error: 'No puedes pagarte a ti mismo.' });
 
 		const monto = Number(montoStr);
 		if (!Number.isFinite(monto) || monto <= 0) {
