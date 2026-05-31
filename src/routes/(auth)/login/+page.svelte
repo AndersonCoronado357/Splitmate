@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import { supabaseBrowser } from '$lib/supabase-browser';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -17,7 +18,7 @@
 	async function entrarConGoogle() {
 		cargando = true;
 		const destino = next ? `?next=${encodeURIComponent(next)}` : '';
-		const { error } = await page.data.supabase.auth.signInWithOAuth({
+		const { error } = await supabaseBrowser().auth.signInWithOAuth({
 			provider: 'google',
 			options: { redirectTo: `${location.origin}/auth/callback${destino}` }
 		});

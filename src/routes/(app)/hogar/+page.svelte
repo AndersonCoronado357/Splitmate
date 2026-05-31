@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import Select from '$lib/components/Select.svelte';
 	import { monedas } from '$lib/monedas';
+	import { supabaseBrowser } from '$lib/supabase-browser';
 	import Crown from '@lucide/svelte/icons/crown';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Check from '@lucide/svelte/icons/check';
@@ -66,7 +67,7 @@
 	async function toggleActiva() {
 		const nuevo = !activa;
 		activa = nuevo;
-		const { error } = await page.data.supabase.rpc('set_invitacion_activa', {
+		const { error } = await supabaseBrowser().rpc('set_invitacion_activa', {
 			p_hogar: data.hogar.id,
 			p_activa: nuevo
 		});

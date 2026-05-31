@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, user }, parent,
 		miembros.map((m) => [m.userId, { display_name: m.nombre, avatar_url: m.avatar }])
 	);
 
-	const gastos = await listarGastos(supabase, hogarActivo.id, user.id, perfiles);
+	const gastos = await listarGastos(supabase, hogarActivo.id, user.id, perfiles, hogarActivo.moneda);
 
 	return { gastos };
 };

@@ -93,18 +93,28 @@
 			}).format(n)
 	);
 
+	// Las fechas en BD son YYYY-MM-DD (sin TZ). Las parseamos como UTC y las
+	// formateamos como UTC para que server (Node) y cliente (browser) muestren
+	// SIEMPRE el mismo string. Sin esto, el server en UTC formatea una fecha y
+	// el cliente en UTC-5 formatea otra → hydration mismatch → doble parpadeo.
+	function parseISO(iso: string): Date {
+		const [y, m, d] = iso.split('-').map(Number);
+		return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+	}
 	function fmtFecha(iso: string) {
-		return new Date(iso + 'T00:00:00').toLocaleDateString('es-CO', {
+		return new Intl.DateTimeFormat('es-CO', {
 			day: 'numeric',
 			month: 'long',
-			year: 'numeric'
-		});
+			year: 'numeric',
+			timeZone: 'UTC'
+		}).format(parseISO(iso));
 	}
 	function fmtFechaCorta(iso: string) {
-		return new Date(iso + 'T00:00:00').toLocaleDateString('es-CO', {
+		return new Intl.DateTimeFormat('es-CO', {
 			day: 'numeric',
-			month: 'short'
-		});
+			month: 'short',
+			timeZone: 'UTC'
+		}).format(parseISO(iso));
 	}
 	function iniciales(nombre: string) {
 		return (
@@ -141,141 +151,38 @@
 		return 'pendiente' as const;
 	}
 
-	let aporteMonto = $state(0);
-
-	// === Optimistic UI ====================================================
-	type AporteVista = {
-		id: string;
-		divisionId: string;
-		monto: number;
-		fecha: string;
-		registradoPorId: string;
-		registradoPorNombre: string;
-		createdAt: string;
-		participanteNombre: string;
-		participanteAvatar: string | null;
-		participanteId: string;
-	};
-	let pendientes = $state<AporteVista[]>([]);
-	let borradosIds = $state<Set<string>>(new Set());
+	// Input arranca vacío; el usuario decide cuánto. Auto-llenarlo con el
+	// pendiente provocaba parpadeo de hidratación.
+	let aporteMonto = $state<number | null>(null);
 	let errorAporte = $state<string | null>(null);
 
-	// Si CAMBIA de gasto (otro id), tiramos todo el estado optimista — pertenece
-	// al gasto anterior. NO limpiamos al simplemente refrescar el mismo gasto:
-	// cada pendiente/borrado se limpia individualmente cuando SU propia acción
-	// confirmó (ver enhance handlers abajo). Eso evita el race condition cuando
-	// el usuario hace varias acciones rápidas.
-	let ultimoGastoId = $state<string | null>(null);
+	// Tope en vivo: si el usuario escribe (o pega) un monto mayor a lo que le
+	// falta por pagar, lo recortamos al pendiente al instante. Así no puede
+	// "exceder" su propia parte ni accidentalmente ni a propósito.
 	$effect(() => {
-		const id = gasto?.id ?? null;
-		if (id !== ultimoGastoId) {
-			ultimoGastoId = id;
-			pendientes = [];
-			borradosIds = new Set();
+		if (aporteMonto !== null && pendienteMio > 0 && aporteMonto > pendienteMio) {
+			aporteMonto = pendienteMio;
 		}
 	});
-	$effect(() => {
-		aporteMonto = pendienteMio;
-	});
 
-	function onEnhanceAportar({ formData, cancel }: { formData: FormData; cancel: () => void }) {
-		const monto = Number(formData.get('monto'));
-		if (!miDivision || !Number.isFinite(monto) || monto <= 0) {
-			cancel();
-			return;
-		}
-		const tempId = `tmp-${crypto.randomUUID()}`;
-		const hoy = new Date().toISOString().slice(0, 10);
-		const yoNombre = vista?.divisiones.find((d) => d.participanteId === yo)?.nombre || 'Tú';
-		const yoAvatar = vista?.divisiones.find((d) => d.participanteId === yo)?.avatar || null;
-		pendientes = [
-			...pendientes,
-			{
-				id: tempId,
-				divisionId: miDivision.id,
-				monto,
-				fecha: hoy,
-				registradoPorId: yo,
-				registradoPorNombre: yoNombre,
-				createdAt: new Date().toISOString(),
-				participanteNombre: yoNombre,
-				participanteAvatar: yoAvatar,
-				participanteId: yo
-			}
-		];
-		errorAporte = null;
-		return async ({
-			result,
-			update
-		}: {
-			result: { type: string; data?: { error?: string } };
-			update: (opts?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
-		}) => {
-			if (result.type === 'success') {
-				await update({ invalidateAll: false });
-				await invalidate('app:gasto-detalle');
-				// Esperamos a que el padre refresque sus datos antes de limpiar el
-				// optimista, así nunca hay "doble" ni "desaparece y reaparece".
-				if (gasto && onCambio) await onCambio(gasto.id);
-				pendientes = pendientes.filter((p) => p.id !== tempId);
-			} else {
-				pendientes = pendientes.filter((p) => p.id !== tempId);
-				errorAporte = result.data?.error || 'No se pudo registrar el pago.';
-			}
-		};
+	// Bandera de "hay una acción en vuelo". Mientras esté en true:
+	//   - el form de aporte se deshabilita,
+	//   - los botones de borrar (aporte y gasto) se deshabilitan,
+	//   - el botón en vuelo muestra "Guardando…" / "Borrando…".
+	// Cuando el server confirma, refrescamos los datos del gasto y soltamos.
+	// Pasamos al server con confianza: si el delete devolvió count=0 ahora la
+	// action devuelve error (no más fantasmas que reaparecen).
+	let procesando = $state(false);
+
+	// Solo el que registró el aporte puede borrarlo (RLS migración 013).
+	// Si otro miembro tiene un error en un aporte suyo, hay que hablarlo,
+	// no anularle el registro de un pago a sus espaldas.
+	function puedoBorrar(a: { registradoPorId: string }) {
+		return a.registradoPorId === yo;
 	}
 
-	function onEnhanceBorrarAporte(aporteId: string) {
-		borradosIds = new Set([...borradosIds, aporteId]);
-		errorAporte = null;
-		return async ({
-			result,
-			update
-		}: {
-			result: { type: string; data?: { error?: string } };
-			update: (opts?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
-		}) => {
-			if (result.type === 'success') {
-				await update({ invalidateAll: false });
-				await invalidate('app:gasto-detalle');
-				if (gasto && onCambio) await onCambio(gasto.id);
-				const next = new Set(borradosIds);
-				next.delete(aporteId);
-				borradosIds = next;
-			} else {
-				const next = new Set(borradosIds);
-				next.delete(aporteId);
-				borradosIds = next;
-				errorAporte = result.data?.error || 'No se pudo borrar el aporte.';
-			}
-		};
-	}
-
-	function onEnhanceBorrarGasto() {
-		// Optimistic: avisamos al padre AL INSTANTE para que el modal se cierre
-		// y el gasto desaparezca del listado.
-		if (gastoId && onGastoBorrado) onGastoBorrado(gastoId);
-		return async ({ update }: { update: (opts?: { invalidateAll?: boolean }) => Promise<void> }) => {
-			await update({ invalidateAll: false });
-		};
-	}
-
-	function puedoBorrar(a: { registradoPorId: string; participanteId: string }) {
-		if (!vista) return false;
-		return a.registradoPorId === yo || a.participanteId === yo || vista.pagadorId === yo;
-	}
-
-	const divisionesEfectivas = $derived(
-		(vista?.divisiones ?? []).map((d) => {
-			const restados = d.aportes
-				.filter((a) => borradosIds.has(a.id))
-				.reduce((s, a) => s + a.monto, 0);
-			const sumadosPropios = pendientes
-				.filter((p) => p.divisionId === d.id)
-				.reduce((s, p) => s + p.monto, 0);
-			return { ...d, pagado: Math.max(0, d.pagado - restados) + sumadosPropios };
-		})
-	);
+	// Lista de divisiones tal cual vienen del server. Sin ajustes optimistas.
+	const divisionesEfectivas = $derived(vista?.divisiones ?? []);
 
 	const miDivision = $derived(
 		divisionesEfectivas.find((d) => d.participanteId === yo) ?? null
@@ -293,14 +200,110 @@
 				participanteId: d.participanteId
 			}))
 		);
-		const total = [...desdeServer, ...pendientes].filter((a) => !borradosIds.has(a.id));
-		return total.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+		return desdeServer.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 	});
 
 	const totalPagado = $derived(divisionesEfectivas.reduce((acc, d) => acc + d.pagado, 0));
 	const totalPendiente = $derived(Math.max(0, (vista?.monto ?? 0) - totalPagado));
 
 	const cargandoDetalle = $derived(!gasto && !!fallback);
+
+	// === Handlers de form. Patrón uniforme: procesando=true al inicio, ====
+	// await update + invalidate + onCambio en el éxito, procesando=false al
+	// final pase lo que pase. NADA es optimista — la UI se actualiza solo
+	// cuando llega la verdad del server.
+
+	function onEnhanceAportar({ formData, cancel }: { formData: FormData; cancel: () => void }) {
+		if (procesando) {
+			cancel();
+			return;
+		}
+		const monto = Number(formData.get('monto'));
+		if (!miDivision || !Number.isFinite(monto) || monto <= 0) {
+			cancel();
+			return;
+		}
+		procesando = true;
+		errorAporte = null;
+		return async ({
+			result,
+			update
+		}: {
+			result: { type: string; data?: { error?: string } };
+			update: (opts?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+		}) => {
+			try {
+				if (result.type === 'success') {
+					await update({ invalidateAll: false });
+					await invalidate('app:gasto-detalle');
+					if (onCambio) await onCambio(gasto?.id ?? '');
+					aporteMonto = null;
+				} else {
+					errorAporte = result.data?.error || 'No se pudo registrar el pago.';
+				}
+			} finally {
+				procesando = false;
+			}
+		};
+	}
+
+	function onEnhanceBorrarAporte(aporteId: string) {
+		return ({ cancel }: { formData: FormData; cancel: () => void }) => {
+			if (procesando) {
+				cancel();
+				return;
+			}
+			procesando = true;
+			errorAporte = null;
+			return async ({
+				result,
+				update
+			}: {
+				result: { type: string; data?: { error?: string } };
+				update: (opts?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
+			}) => {
+				try {
+					if (result.type === 'success') {
+						await update({ invalidateAll: false });
+						await invalidate('app:gasto-detalle');
+						if (onCambio) await onCambio(gasto?.id ?? '');
+					} else {
+						errorAporte = result.data?.error || 'No se pudo borrar el aporte.';
+					}
+				} finally {
+					procesando = false;
+				}
+			};
+		};
+	}
+
+	function onEnhanceBorrarGasto({ cancel }: { cancel: () => void }) {
+		if (procesando) {
+			cancel();
+			return;
+		}
+		procesando = true;
+		return async ({
+			result,
+			update
+		}: {
+			result: { type: string; data?: { error?: string } };
+			update: (opts?: { invalidateAll?: boolean }) => Promise<void>;
+		}) => {
+			try {
+				if (result.type === 'success') {
+					await update({ invalidateAll: false });
+					// El gasto YA no existe en el server → avisamos al padre para
+					// que cierre modal y lo quite del listado.
+					if (gastoId && onGastoBorrado) onGastoBorrado(gastoId);
+				} else {
+					errorAporte = result.data?.error || 'No se pudo borrar el gasto.';
+				}
+			} finally {
+				procesando = false;
+			}
+		};
+	}
 </script>
 
 {#if vista}
@@ -327,7 +330,8 @@
 							<button
 								type="button"
 								onclick={() => (confirmarBorrar = true)}
-								class="flex size-9 shrink-0 items-center justify-center rounded-input text-muted transition-colors hover:bg-money-contra-bg hover:text-money-contra"
+								disabled={procesando}
+								class="flex size-9 shrink-0 items-center justify-center rounded-input text-muted transition-colors hover:bg-money-contra-bg hover:text-money-contra disabled:opacity-40"
 								aria-label="Borrar gasto"
 							>
 								<Trash2 size={17} />
@@ -349,20 +353,27 @@
 								>
 									<button
 										type="submit"
-										class="w-full rounded-input bg-money-contra px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+										disabled={procesando}
+										class="w-full rounded-input bg-money-contra px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
 									>
-										Sí, borrar
+										{procesando ? 'Borrando…' : 'Sí, borrar'}
 									</button>
 								</form>
 								<button
 									type="button"
 									onclick={() => (confirmarBorrar = false)}
-									class="flex-1 rounded-input bg-surface px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-bg"
+									disabled={procesando}
+									class="flex-1 rounded-input bg-surface px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-bg disabled:opacity-60"
 								>
 									Cancelar
 								</button>
 							</div>
 						</div>
+					{/if}
+					{#if errorAporte && !confirmarBorrar}
+						<p class="mt-3 rounded-input bg-money-contra-bg px-3 py-2 text-sm text-money-contra">
+							{errorAporte}
+						</p>
 					{/if}
 				</section>
 
@@ -596,17 +607,19 @@
 										max={pendienteMio}
 										step="any"
 										inputmode="decimal"
+										placeholder="0"
+										disabled={procesando}
 										bind:value={aporteMonto}
-										class="tabular w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none"
+										class="tabular w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70 disabled:opacity-60"
 									/>
 								</div>
 								<button
 									type="submit"
-									disabled={!aporteMonto || aporteMonto <= 0}
+									disabled={procesando || !aporteMonto || aporteMonto <= 0}
 									class="flex h-11 shrink-0 items-center justify-center gap-2 rounded-input bg-brand-500 px-5 font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
 								>
 									<HandCoins size={16} />
-									Registrar pago
+									{procesando ? 'Guardando…' : 'Registrar pago'}
 								</button>
 							</form>
 							{#if errorAporte}
@@ -686,12 +699,13 @@
 										<form
 											method="POST"
 											action={`/gastos/${gastoId}?/borrarAporte`}
-											use:enhance={() => onEnhanceBorrarAporte(a.id)}
+											use:enhance={onEnhanceBorrarAporte(a.id)}
 										>
 											<input type="hidden" name="id" value={a.id} />
 											<button
 												type="submit"
-												class="flex size-8 shrink-0 items-center justify-center rounded-input text-muted transition-colors hover:bg-money-contra-bg hover:text-money-contra"
+												disabled={procesando}
+												class="flex size-8 shrink-0 items-center justify-center rounded-input text-muted transition-colors hover:bg-money-contra-bg hover:text-money-contra disabled:opacity-40"
 												aria-label="Borrar aporte"
 											>
 												<Trash2 size={14} />

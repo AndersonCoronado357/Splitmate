@@ -24,5 +24,8 @@ export const GET: RequestHandler = async ({ locals, params, cookies }) => {
 	const gasto = await cargarGasto(locals.supabase, params.id, perfiles);
 	if (!gasto || gasto.hogarId !== activo.id) error(404, 'Gasto no encontrado');
 
-	return json(gasto);
+	// no-store: que el browser NUNCA sirva una versión cacheada de este JSON.
+	// Si lo cacheara, después de borrar/agregar un aporte, la próxima petición
+	// devolvería data vieja y el aporte borrado aparecería "vuelto a aparecer".
+	return json(gasto, { headers: { 'cache-control': 'no-store' } });
 };

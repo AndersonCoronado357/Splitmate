@@ -13,8 +13,17 @@
 
 	// Tras cada navegación: cerrar el cajón y PRECARGAR los demás módulos del menú
 	// (así el siguiente clic ya está en caché y la navegación es instantánea).
+	// IMPORTANTE: nos saltamos la PRIMERA llamada (mount inicial). preloadData
+	// dispara fetches que ejecutan loaders, los cuales tocan cookies/auth y
+	// pueden invalidar `supabase:auth` justo después de hidratar → re-render
+	// global = parpadeo. Tras la primera nav del usuario sí precargamos.
+	let primeraNav = true;
 	afterNavigate(() => {
 		menuAbierto = false;
+		if (primeraNav) {
+			primeraNav = false;
+			return;
+		}
 		for (const tab of navTabs) {
 			if (tab.href !== page.url.pathname) preloadData(tab.href);
 		}

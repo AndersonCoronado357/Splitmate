@@ -47,7 +47,28 @@ export type GastoListado = {
 	categoria: { nombre: string; icono: string | null } | null;
 	miParte: number; // 0 si no participo
 	esMio: boolean; // soy el pagador
+	// Strings ya formateados en el servidor para evitar que el cliente
+	// vuelva a correr `Intl` al hidratar (lo que dispara re-render en toda
+	// la lista = parpadeo). Server y cliente reciben EL MISMO string.
+	montoTexto: string;
+	miParteTexto: string;
+	fechaTexto: string;
 };
+
+// Formateadores estables del lado servidor. Se crean UNA vez por proceso y se
+// reutilizan, así nunca varían entre llamadas.
+function fmtMonedaFactory(moneda: string) {
+	return new Intl.NumberFormat('es-CO', {
+		style: 'currency',
+		currency: moneda,
+		maximumFractionDigits: 0
+	});
+}
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function fmtFechaCorta(iso: string) {
+	const [, m, d] = iso.split('-');
+	return `${parseInt(d, 10)} ${MESES[parseInt(m, 10) - 1]}`;
+}
 
 // Listado del hogar, ordenado de más reciente a más antiguo, con la parte que
 // me toca a mí y los datos del pagador. Los perfiles (display_name/avatar) salen
@@ -58,7 +79,8 @@ export async function listarGastos(
 	supabase: SupabaseClient,
 	hogarId: string,
 	miId: string,
-	perfiles: Map<string, PerfilMin>
+	perfiles: Map<string, PerfilMin>,
+	moneda: string
 ): Promise<GastoListado[]> {
 	const { data: gastos } = await supabase
 		.from('gastos_compartidos')
@@ -74,22 +96,28 @@ export async function listarGastos(
 
 	if (!gastos || gastos.length === 0) return [];
 
+	const fmtMoneda = fmtMonedaFactory(moneda);
+
 	return gastos.map((g) => {
 		const cat = Array.isArray(g.categorias) ? g.categorias[0] : g.categorias;
 		const perfil = perfiles.get(g.pagador_id as string);
 		const misDivs = (g.gasto_divisiones ?? []) as Array<{ monto: number }>;
 		const miParte = misDivs.length > 0 ? Number(misDivs[0].monto) : 0;
+		const monto = Number(g.monto);
 		return {
 			id: g.id as string,
 			titulo: g.titulo as string,
-			monto: Number(g.monto),
+			monto,
 			fecha: g.fecha as string,
 			pagadorId: g.pagador_id as string,
 			pagadorNombre: perfil?.display_name || 'Sin nombre',
 			pagadorAvatar: perfil?.avatar_url || null,
 			categoria: cat ? { nombre: cat.nombre as string, icono: cat.icono as string | null } : null,
 			miParte,
-			esMio: (g.pagador_id as string) === miId
+			esMio: (g.pagador_id as string) === miId,
+			montoTexto: fmtMoneda.format(monto),
+			miParteTexto: miParte > 0 ? fmtMoneda.format(miParte) : '',
+			fechaTexto: fmtFechaCorta(g.fecha as string)
 		};
 	});
 }

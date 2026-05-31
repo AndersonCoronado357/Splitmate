@@ -1,26 +1,10 @@
-import { createBrowserClient, createServerClient, isBrowser } from '@supabase/ssr';
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY } from '$env/static/public';
 import type { LayoutLoad } from './$types';
 
-export const load: LayoutLoad = async ({ data, depends, fetch }) => {
+// Solo forwardeamos session/user al cliente. El supabase del browser se
+// instancia LAZY y como singleton en `$lib/supabase-browser.ts`, así NO entra
+// en page.data — eso evita que al hidratar cambie la identidad del objeto
+// page.data y se gatille un re-render de toda la app (= doble parpadeo).
+export const load: LayoutLoad = async ({ data, depends }) => {
 	depends('supabase:auth');
-
-	const supabase = isBrowser()
-		? createBrowserClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
-				global: { fetch }
-			})
-		: createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
-				global: { fetch },
-				cookies: { getAll: () => data.cookies }
-			});
-
-	const {
-		data: { session }
-	} = await supabase.auth.getSession();
-
-	const {
-		data: { user }
-	} = await supabase.auth.getUser();
-
-	return { supabase, session, user };
+	return { session: data.session, user: data.user };
 };

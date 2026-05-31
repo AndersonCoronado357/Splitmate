@@ -36,9 +36,18 @@ export const actions: Actions = {
 	borrar: async ({ locals: { supabase, user }, params }) => {
 		if (!user) redirect(303, '/login');
 
-		const { error } = await supabase.from('gastos_compartidos').delete().eq('id', params.id);
+		const { error, count } = await supabase
+			.from('gastos_compartidos')
+			.delete({ count: 'exact' })
+			.eq('id', params.id);
 		// La RLS limita el delete a quien sea pagador; si no, error.
 		if (error) return fail(400, { error: error.message });
+		if (!count) {
+			return fail(403, {
+				seccion: 'borrar',
+				error: 'No se pudo borrar el gasto (sin permisos o ya no existe).'
+			});
+		}
 
 		// No redireccionamos. El cliente (modal en /gastos o página /gastos/[id])
 		// decide qué hacer tras éxito (cerrar modal o navegar a /gastos).
@@ -76,15 +85,29 @@ export const actions: Actions = {
 		return { seccion: 'aportar', ok: true };
 	},
 
-	// Borrar un aporte que YO registré (la RLS lo refuerza).
+	// Borrar un aporte. La RLS permite borrarlo a quien lo registró, al participante
+	// dueño de la división o al pagador del gasto (migración 009).
+	// IMPORTANTE: chequeamos `count` para detectar borrados de 0 filas (RLS rechaza
+	// silenciosamente, fila inexistente, etc.). Si no devolvemos error en ese
+	// caso, el cliente cree que se borró y al refrescar el aporte reaparece →
+	// el bug clásico de "elimino y vuelve a aparecer".
 	borrarAporte: async ({ request, locals: { supabase, user } }) => {
 		if (!user) redirect(303, '/login');
 		const fd = await request.formData();
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { seccion: 'aportar', error: 'Falta el id.' });
 
-		const { error } = await supabase.from('aportes').delete().eq('id', id);
+		const { error, count } = await supabase
+			.from('aportes')
+			.delete({ count: 'exact' })
+			.eq('id', id);
 		if (error) return fail(400, { seccion: 'aportar', error: error.message });
+		if (!count) {
+			return fail(403, {
+				seccion: 'aportar',
+				error: 'No se pudo borrar el aporte (sin permisos o ya no existe).'
+			});
+		}
 		return { seccion: 'aportar', ok: true };
 	}
 };

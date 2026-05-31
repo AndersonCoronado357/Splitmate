@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { invalidate } from '$app/navigation';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Receipt from '@lucide/svelte/icons/receipt';
@@ -14,27 +13,11 @@
 
 	let { data }: { data: PageData } = $props();
 
-	const moneda = $derived(
-		(page.data.hogarActivo as { moneda?: string } | undefined)?.moneda || 'COP'
-	);
-
-	const fmt = $derived((n: number) =>
-		new Intl.NumberFormat('es-CO', {
-			style: 'currency',
-			currency: moneda,
-			maximumFractionDigits: 0
-		}).format(n)
-	);
-
-	function fmtFecha(iso: string) {
-		const hoy = new Date();
-		const f = new Date(iso + 'T00:00:00');
-		const diasAtras = Math.floor((+hoy - +f) / 86400000);
-		if (diasAtras === 0) return 'Hoy';
-		if (diasAtras === 1) return 'Ayer';
-		if (diasAtras < 7) return f.toLocaleDateString('es-CO', { weekday: 'long' });
-		return f.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
-	}
+	// Monto, mi parte y fecha vienen YA formateados desde el server
+	// (gasto.montoTexto, gasto.miParteTexto, gasto.fechaTexto). Así evitamos
+	// usar Intl.NumberFormat / Intl.DateTimeFormat en el cliente, que entre
+	// Node y el browser pueden producir strings ligeramente distintos para la
+	// misma fecha o monto → hidratación distinta → re-render = parpadeo.
 
 	function iniciales(nombre: string) {
 		return (
@@ -64,10 +47,13 @@
 	);
 
 	// Cuando data.gastos cambia (refresh del listado), limpiamos los borrados
-	// (el server ya los reflejó).
+	// (el server ya los reflejó). Solo reasignamos si HAY algo que limpiar:
+	// reasignar `new Set()` sobre un Set ya vacío cambia la referencia y
+	// dispara una re-evaluación inútil de `gastosVisibles` justo al hidratar,
+	// lo que el usuario percibe como un parpadeo de la lista.
 	$effect(() => {
 		void data.gastos.length;
-		gastosBorrados = new Set();
+		if (gastosBorrados.size > 0) gastosBorrados = new Set();
 	});
 
 	// Contador global de pedidos para descartar respuestas que llegan tarde
@@ -241,7 +227,7 @@
 										</span>
 									{/if}
 									<span class="truncate">
-										{g.esMio ? 'Tú' : g.pagadorNombre} pagó · {fmtFecha(g.fecha)}
+										{g.esMio ? 'Tú' : g.pagadorNombre} pagó · {g.fechaTexto}
 										{#if g.categoria}· {g.categoria.nombre}{/if}
 									</span>
 								</p>
@@ -249,9 +235,9 @@
 
 							<!-- Monto + mi parte -->
 							<div class="shrink-0 text-right">
-								<p class="tabular font-semibold text-text">{fmt(g.monto)}</p>
+								<p class="tabular font-semibold text-text">{g.montoTexto}</p>
 								{#if g.miParte > 0}
-									<p class="tabular mt-0.5 text-xs text-muted">tu parte {fmt(g.miParte)}</p>
+									<p class="tabular mt-0.5 text-xs text-muted">tu parte {g.miParteTexto}</p>
 								{:else}
 									<p class="mt-0.5 text-xs text-muted">no participas</p>
 								{/if}
