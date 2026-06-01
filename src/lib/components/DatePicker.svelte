@@ -156,16 +156,28 @@
 		if (abierto && raiz && !raiz.contains(e.target as Node)) cerrar();
 	}
 
-	// Texto mostrado en el trigger.
+	// Texto mostrado en el trigger. Uso el array MESES en español a propósito —
+	// confiar en `toLocaleDateString('es-CO')` no es seguro porque algunos
+	// runtimes (Cloudflare workers, ciertos navegadores) no tienen el locale y
+	// caen a inglés silenciosamente.
+	const MESES_CORTO = [
+		'ene',
+		'feb',
+		'mar',
+		'abr',
+		'may',
+		'jun',
+		'jul',
+		'ago',
+		'sep',
+		'oct',
+		'nov',
+		'dic'
+	];
 	const textoBoton = $derived.by(() => {
 		const p = parseIso(value);
 		if (!p) return placeholder;
-		const f = new Date(p.y, p.m, p.d);
-		return f.toLocaleDateString('es-CO', {
-			day: 'numeric',
-			month: 'short',
-			year: 'numeric'
-		});
+		return `${p.d} ${MESES_CORTO[p.m]} ${p.y}`;
 	});
 
 	function esHoy(c: Celda) {

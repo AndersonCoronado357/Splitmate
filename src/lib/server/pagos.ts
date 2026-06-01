@@ -23,7 +23,11 @@ export type PagoVista = {
 	confirmadoAt: string | null;
 };
 
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+// Nombres completos en español (evita confusión con inglés en `may`).
+const MESES = [
+	'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+	'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+];
 function fmtFecha(iso: string) {
 	const [, m, d] = iso.split('-');
 	return `${parseInt(d, 10)} ${MESES[parseInt(m, 10) - 1]}`;
@@ -45,12 +49,16 @@ export async function listarPagos(
 	perfiles: Map<string, PerfilMin>,
 	moneda: string
 ): Promise<PagoVista[]> {
+	// Solo pagos genéricos (sin `prestamo_id`). Las devoluciones asociadas
+	// a un préstamo viven en /prestamos y no se mezclan con los pagos
+	// libres de saldar deuda — regla del plan: módulos separados.
 	const { data } = await supabase
 		.from('pagos')
 		.select(
 			'id, hogar_id, pagador_id, receptor_id, monto, fecha, nota, estado, registrado_por, confirmado_at, created_at'
 		)
 		.eq('hogar_id', hogarId)
+		.is('prestamo_id', null)
 		.order('created_at', { ascending: false });
 
 	type Fila = {

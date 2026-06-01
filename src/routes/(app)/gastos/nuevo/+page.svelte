@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import Select from '$lib/components/Select.svelte';
 	import DatePicker from '$lib/components/DatePicker.svelte';
+	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import { iconoCategoria } from '$lib/iconosCategoria';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Check from '@lucide/svelte/icons/check';
@@ -36,7 +37,10 @@
 			}).format(n)
 	);
 
-	const hoyIso = new Date().toISOString().slice(0, 10);
+	// Fecha LOCAL del usuario (no UTC). `toISOString()` te da el día siguiente
+	// si son más de las 7pm en Colombia (UTC-5) porque convierte a UTC.
+	const hoyD = new Date();
+	const hoyIso = `${hoyD.getFullYear()}-${String(hoyD.getMonth() + 1).padStart(2, '0')}-${String(hoyD.getDate()).padStart(2, '0')}`;
 
 	let titulo = $state('');
 	let monto = $state<number | null>(null);
@@ -286,17 +290,13 @@
 						<div class="grid gap-4 sm:grid-cols-2">
 							<div class="space-y-1.5">
 								<label for="monto" class="block text-sm font-medium text-text">Monto total</label>
-								<input
+								<MoneyInput
 									id="monto"
 									name="monto"
-									type="number"
 									required
-									min="1"
-									step="any"
-									inputmode="decimal"
+									min={1}
 									bind:value={monto}
-									placeholder="0"
-									class={inputClass + ' tabular'}
+									class={inputClass}
 								/>
 							</div>
 							<div class="space-y-1.5">

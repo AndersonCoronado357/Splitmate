@@ -84,8 +84,16 @@
 	const inputClass =
 		'w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70';
 
-	const fmtFecha = (iso: string) =>
-		new Intl.DateTimeFormat('es-CO', { dateStyle: 'long' }).format(new Date(iso));
+	// Array manual de meses: `Intl.DateTimeFormat('es-CO')` no es confiable en
+	// runtimes sin locale es-CO (cae a inglés silencioso).
+	const MESES_LARGO = [
+		'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+		'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+	];
+	const fmtFecha = (iso: string) => {
+		const d = new Date(iso);
+		return `${d.getDate()} de ${MESES_LARGO[d.getMonth()]} de ${d.getFullYear()}`;
+	};
 
 	const nombreMoneda = $derived(
 		monedas.find((m) => m.value === data.hogar.moneda)?.label ?? data.hogar.moneda

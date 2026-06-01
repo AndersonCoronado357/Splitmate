@@ -95,52 +95,16 @@
 		)
 	);
 
-	// === Abonar inline a una deuda específica ===============================
-	// Una fila a la vez. El abono crea un aporte pendiente contra la división.
-	let abonandoDivisionId = $state<string | null>(null);
-	let aporteMonto = $state<number | null>(null);
-	let procesando = $state(false);
-	let errorAbono = $state<string | null>(null);
-
-	function abrirAbonar(f: FilaDeuda) {
-		if (procesando) return;
-		abonandoDivisionId = f.divisionId;
-		aporteMonto = f.pendiente;
-		errorAbono = null;
-	}
-	function cerrarAbonar() {
-		if (procesando) return;
-		abonandoDivisionId = null;
-		errorAbono = null;
-	}
-
-	function onEnhanceAbonar({ cancel }: { cancel: () => void }) {
-		if (procesando) {
-			cancel();
-			return;
-		}
-		procesando = true;
-		errorAbono = null;
-		return async ({
-			result,
-			update
-		}: {
-			result: { type: string; data?: { error?: string } };
-			update: (opts?: { reset?: boolean; invalidateAll?: boolean }) => Promise<void>;
-		}) => {
-			try {
-				if (result.type === 'success') {
-					await update({ invalidateAll: false });
-					await invalidate('app:inicio');
-					abonandoDivisionId = null;
-				} else {
-					errorAbono = result.data?.error || 'No se pudo registrar el abono.';
-				}
-			} finally {
-				procesando = false;
-			}
-		};
-	}
+	// Filtro de la lista: arranco viendo lo que DEBO (lo más urgente).
+	type Filtro = 'debes' | 'te_deben' | 'todas';
+	let filtro = $state<Filtro>('debes');
+	const verDebes = $derived(filtro === 'debes' || filtro === 'todas');
+	const verTeDeben = $derived(filtro === 'te_deben' || filtro === 'todas');
+	const tabs = $derived([
+		{ id: 'debes' as const, label: 'Debes', count: filasLeDebo.length },
+		{ id: 'te_deben' as const, label: 'Te deben', count: filasMeDeben.length },
+		{ id: 'todas' as const, label: 'Todas', count: filasLeDebo.length + filasMeDeben.length }
+	]);
 
 	// Acciones de pagos pendientes (confirmar / rechazar / borrar).
 	let procesandoPago = $state<string | null>(null);
@@ -378,164 +342,151 @@
 		</section>
 	{/if}
 
-	<!-- Lo que debés — una fila por gasto -->
-	{#if filasLeDebo.length > 0}
-		<section class="mt-6">
-			<h2 class="text-sm font-semibold text-text">Debes</h2>
-			<ul class="mt-3 flex flex-col gap-2">
-				{#each filasLeDebo as f (f.divisionId)}
-					{@const enAbonar = abonandoDivisionId === f.divisionId}
-					{@const totalmenteCubierto =
-						f.pendiente <= 0.01 && f.pendienteConfirmacion > 0.01}
-					<li class="rounded-card border border-border bg-surface shadow-card">
-						<div class="flex items-center gap-3 p-4">
-							{#if f.otroAvatar}
-								<img
-									src={f.otroAvatar}
-									alt=""
-									referrerpolicy="no-referrer"
-									class="size-10 shrink-0 rounded-full object-cover"
-								/>
-							{:else}
-								<span
-									class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
-								>
-									{iniciales(f.otroNombre)}
-								</span>
-							{/if}
-							<div class="min-w-0 flex-1">
-								<p class="truncate text-sm font-medium text-text">{f.gastoTitulo}</p>
-								<p class="truncate text-xs text-muted">
-									a {f.otroNombre} · {f.fechaTexto}
-								</p>
-								{#if f.pendienteConfirmacion > 0.01}
-									<p class="mt-0.5 text-xs text-warning">
-										{f.pendienteConfirmacionTexto} esperando confirmación
-									</p>
-								{/if}
-							</div>
-							{#if totalmenteCubierto}
-								<span class="tabular shrink-0 text-sm font-semibold text-warning">
-									pendiente
-								</span>
-							{:else}
-								<span class="tabular shrink-0 text-sm font-semibold text-money-contra">
-									{f.pendienteTexto}
-								</span>
-								{#if !enAbonar}
-									<button
-										type="button"
-										onclick={() => abrirAbonar(f)}
-										disabled={procesando}
-										class="flex h-9 shrink-0 items-center justify-center gap-1 rounded-input bg-brand-500 px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
-										aria-label="Abonar a {f.gastoTitulo}"
-									>
-										<HandCoins size={14} />
-										Abonar
-									</button>
-								{/if}
-							{/if}
-						</div>
-
-						{#if enAbonar}
-							<form
-								method="POST"
-								action="?/registrarAporte"
-								use:enhance={onEnhanceAbonar}
-								class="space-y-3 border-t border-border bg-brand-50/40 px-4 py-3"
-							>
-								<input type="hidden" name="division_id" value={f.divisionId} />
-								<div class="space-y-1.5">
-									<label
-										for="abono-monto-{f.divisionId}"
-										class="block text-xs font-medium text-text"
-									>
-										Cuánto abonas
-										<span class="font-normal text-muted">· te falta {f.pendienteTexto}</span>
-									</label>
-									<input
-										id="abono-monto-{f.divisionId}"
-										name="monto"
-										type="number"
-										required
-										min="0.01"
-										max={f.pendiente}
-										step="any"
-										inputmode="decimal"
-										placeholder="0"
-										disabled={procesando}
-										bind:value={aporteMonto}
-										class="tabular w-full rounded-input border border-transparent bg-surface px-3 py-2 text-sm text-text outline-none disabled:opacity-60"
-									/>
-								</div>
-
-								{#if errorAbono}
-									<p class="rounded-input bg-money-contra-bg px-3 py-2 text-xs text-money-contra">
-										{errorAbono}
-									</p>
-								{/if}
-
-								<div class="flex gap-2">
-									<button
-										type="button"
-										onclick={cerrarAbonar}
-										disabled={procesando}
-										class="flex h-9 flex-1 items-center justify-center rounded-input border border-border bg-surface text-xs font-semibold text-text transition-colors hover:bg-bg disabled:opacity-50"
-									>
-										Cancelar
-									</button>
-									<button
-										type="submit"
-										disabled={procesando || !aporteMonto || aporteMonto <= 0}
-										class="flex h-9 flex-[1.4] items-center justify-center gap-1.5 rounded-input bg-brand-500 text-xs font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
-									>
-										<HandCoins size={14} />
-										{procesando ? 'Registrando…' : 'Registrar abono'}
-									</button>
-								</div>
-							</form>
+	<!-- Tabs de filtro: empieza en "Debes" porque suele ser lo más urgente. -->
+	{#if filasLeDebo.length > 0 || filasMeDeben.length > 0}
+		<section class="mt-6 flex flex-col lg:min-h-0 lg:flex-1">
+			<div class="flex gap-2" role="tablist" aria-label="Filtro de deudas">
+				{#each tabs as t (t.id)}
+					{@const activo = filtro === t.id}
+					<button
+						type="button"
+						role="tab"
+						aria-selected={activo}
+						onclick={() => (filtro = t.id)}
+						class={'flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold shadow-card transition-colors ' +
+							(activo
+								? 'bg-brand-50 text-brand-700'
+								: 'bg-surface text-muted hover:bg-bg hover:text-text')}
+					>
+						<span>{t.label}</span>
+						<span
+							class={'tabular text-[10px] ' + (activo ? 'text-brand-700' : 'text-muted')}
+						>
+							{t.count}
+						</span>
+					</button>
+				{/each}
+			</div>
+			<div class="mt-4 flex flex-col gap-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+				<!-- Sección "Debes" -->
+				{#if verDebes && filasLeDebo.length > 0}
+					<div>
+						{#if filtro === 'todas'}
+							<h3 class="text-sm font-semibold text-money-contra">Debes</h3>
 						{/if}
-					</li>
-				{/each}
-			</ul>
-		</section>
-	{/if}
+						<ul class={'flex flex-col gap-2 ' + (filtro === 'todas' ? 'mt-3' : '')}>
+							{#each filasLeDebo as f (f.divisionId)}
+								{@const totalmenteCubierto =
+									f.pendiente <= 0.01 && f.pendienteConfirmacion > 0.01}
+								<li>
+									<a
+										href={`/gastos/${f.gastoId}`}
+										class="flex items-center gap-3 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:bg-bg"
+									>
+										{#if f.otroAvatar}
+											<img
+												src={f.otroAvatar}
+												alt=""
+												referrerpolicy="no-referrer"
+												class="size-10 shrink-0 rounded-full object-cover"
+											/>
+										{:else}
+											<span
+												class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
+											>
+												{iniciales(f.otroNombre)}
+											</span>
+										{/if}
+										<div class="min-w-0 flex-1">
+											<p class="truncate text-sm font-medium text-text">{f.gastoTitulo}</p>
+											<p class="truncate text-xs text-muted">
+												a {f.otroNombre} · {f.fechaTexto}
+											</p>
+											{#if f.pendienteConfirmacion > 0.01}
+												<p class="mt-0.5 text-xs text-warning">
+													{f.pendienteConfirmacionTexto} esperando confirmación
+												</p>
+											{/if}
+										</div>
+										{#if totalmenteCubierto}
+											<span class="tabular shrink-0 text-sm font-semibold text-warning">
+												pendiente
+											</span>
+										{:else}
+											<span class="tabular shrink-0 text-sm font-semibold text-money-contra">
+												{f.pendienteTexto}
+											</span>
+										{/if}
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
 
-	<!-- Lo que te deben — una fila por gasto -->
-	{#if filasMeDeben.length > 0}
-		<section class="mt-6">
-			<h2 class="text-sm font-semibold text-text">Te deben</h2>
-			<ul class="mt-3 flex flex-col gap-2">
-				{#each filasMeDeben as f (f.divisionId)}
-					<li class="rounded-card border border-border bg-surface shadow-card">
-						<div class="flex items-center gap-3 p-4">
-							{#if f.otroAvatar}
-								<img
-									src={f.otroAvatar}
-									alt=""
-									referrerpolicy="no-referrer"
-									class="size-10 shrink-0 rounded-full object-cover"
-								/>
-							{:else}
-								<span
-									class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
-								>
-									{iniciales(f.otroNombre)}
-								</span>
-							{/if}
-							<div class="min-w-0 flex-1">
-								<p class="truncate text-sm font-medium text-text">{f.gastoTitulo}</p>
-								<p class="truncate text-xs text-muted">
-									{f.otroNombre} · {f.fechaTexto}
-								</p>
-							</div>
-							<span class="tabular shrink-0 text-sm font-semibold text-money-favor">
-								{f.pendienteTexto}
-							</span>
-						</div>
-					</li>
-				{/each}
-			</ul>
+				<!-- Sección "Te deben" -->
+				{#if verTeDeben && filasMeDeben.length > 0}
+					<div>
+						{#if filtro === 'todas'}
+							<h3 class="text-sm font-semibold text-money-favor">Te deben</h3>
+						{/if}
+						<ul class={'flex flex-col gap-2 ' + (filtro === 'todas' ? 'mt-3' : '')}>
+							{#each filasMeDeben as f (f.divisionId)}
+								<li>
+									<a
+										href={`/gastos/${f.gastoId}`}
+										class="flex items-center gap-3 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:bg-bg"
+									>
+										{#if f.otroAvatar}
+											<img
+												src={f.otroAvatar}
+												alt=""
+												referrerpolicy="no-referrer"
+												class="size-10 shrink-0 rounded-full object-cover"
+											/>
+										{:else}
+											<span
+												class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700"
+											>
+												{iniciales(f.otroNombre)}
+											</span>
+										{/if}
+										<div class="min-w-0 flex-1">
+											<p class="truncate text-sm font-medium text-text">{f.gastoTitulo}</p>
+											<p class="truncate text-xs text-muted">
+												{f.otroNombre} · {f.fechaTexto}
+											</p>
+										</div>
+										<span class="tabular shrink-0 text-sm font-semibold text-money-favor">
+											{f.pendienteTexto}
+										</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+
+				<!-- Si el filtro activo deja la lista vacía pero hay datos en otro tab -->
+				{#if (filtro === 'debes' && filasLeDebo.length === 0 && filasMeDeben.length > 0) || (filtro === 'te_deben' && filasMeDeben.length === 0 && filasLeDebo.length > 0)}
+					<div
+						class="flex flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface px-6 py-10 text-center"
+					>
+						<p class="text-sm text-muted">
+							{filtro === 'debes'
+								? 'No debes nada por ahora.'
+								: 'Nadie te debe nada por ahora.'}
+						</p>
+						<button
+							type="button"
+							onclick={() => (filtro = 'todas')}
+							class="mt-3 text-xs font-semibold text-brand-700 hover:underline"
+						>
+							Ver todas
+						</button>
+					</div>
+				{/if}
+			</div>
 		</section>
 	{/if}
 

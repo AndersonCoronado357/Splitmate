@@ -68,7 +68,12 @@ function fmtMonedaFactory(moneda: string) {
 		maximumFractionDigits: 0
 	});
 }
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+// Nombres completos en español para que no se confunda con inglés (`may`
+// es idéntico en ambos idiomas, "mayo" no).
+const MESES = [
+	'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+	'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+];
 function fmtFechaCorta(iso: string) {
 	const [, m, d] = iso.split('-');
 	return `${parseInt(d, 10)} ${MESES[parseInt(m, 10) - 1]}`;

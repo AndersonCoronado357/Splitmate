@@ -29,6 +29,7 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import HandCoins from '@lucide/svelte/icons/hand-coins';
 	import History from '@lucide/svelte/icons/history';
+	import MoneyInput from '$lib/components/MoneyInput.svelte';
 	import type { GastoDetalle as GastoDetalleData } from '$lib/server/gastos';
 
 	type Props = {
@@ -94,28 +95,24 @@
 			}).format(n)
 	);
 
-	// Las fechas en BD son YYYY-MM-DD (sin TZ). Las parseamos como UTC y las
-	// formateamos como UTC para que server (Node) y cliente (browser) muestren
-	// SIEMPRE el mismo string. Sin esto, el server en UTC formatea una fecha y
-	// el cliente en UTC-5 formatea otra → hydration mismatch → doble parpadeo.
-	function parseISO(iso: string): Date {
-		const [y, m, d] = iso.split('-').map(Number);
-		return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
-	}
+	// Las fechas en BD son YYYY-MM-DD (sin TZ). Uso arrays de meses en español
+	// a mano (no `Intl.DateTimeFormat('es-CO')`) porque hay runtimes que no
+	// tienen el locale y caen silenciosamente a inglés.
+	const MESES_LARGO = [
+		'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+		'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+	];
+	const MESES_CORTO = [
+		'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+		'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+	];
 	function fmtFecha(iso: string) {
-		return new Intl.DateTimeFormat('es-CO', {
-			day: 'numeric',
-			month: 'long',
-			year: 'numeric',
-			timeZone: 'UTC'
-		}).format(parseISO(iso));
+		const [y, m, d] = iso.split('-').map(Number);
+		return `${d} de ${MESES_LARGO[(m || 1) - 1]} de ${y}`;
 	}
 	function fmtFechaCorta(iso: string) {
-		return new Intl.DateTimeFormat('es-CO', {
-			day: 'numeric',
-			month: 'short',
-			timeZone: 'UTC'
-		}).format(parseISO(iso));
+		const [, m, d] = iso.split('-').map(Number);
+		return `${d} ${MESES_CORTO[(m || 1) - 1]}`;
 	}
 	function iniciales(nombre: string) {
 		return (
@@ -649,19 +646,14 @@
 										Monto a abonar
 										<span class="font-normal text-muted">· te falta {fmt(pendienteMio)}</span>
 									</label>
-									<input
+									<MoneyInput
 										id="ap-monto-{gastoId}"
 										name="monto"
-										type="number"
 										required
-										min="0.01"
 										max={pendienteMio}
-										step="any"
-										inputmode="decimal"
-										placeholder="0"
 										disabled={procesando}
 										bind:value={aporteMonto}
-										class="tabular w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70 disabled:opacity-60"
+										class="w-full rounded-input border border-transparent bg-brand-50 px-3 py-2.5 text-text outline-none placeholder:text-muted/70 disabled:opacity-60"
 									/>
 								</div>
 								<button

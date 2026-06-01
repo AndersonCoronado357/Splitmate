@@ -268,29 +268,11 @@
 								<Icono size={20} />
 							</span>
 
-							<!-- Título + meta -->
+							<!-- Título + meta (solo fecha — el pagador ya no se muestra acá para
+							     que la fila no se corte en celular). -->
 							<div class="min-w-0 flex-1">
 								<p class="truncate font-semibold text-text">{g.titulo}</p>
-								<p class="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
-									{#if g.pagadorAvatar}
-										<img
-											src={g.pagadorAvatar}
-											alt=""
-											referrerpolicy="no-referrer"
-											class="size-4 shrink-0 rounded-full object-cover"
-										/>
-									{:else}
-										<span
-											class="grid size-4 shrink-0 place-items-center rounded-full bg-brand-50 text-[8px] font-bold text-brand-700"
-										>
-											{iniciales(g.pagadorNombre)}
-										</span>
-									{/if}
-									<span class="truncate">
-										{g.esMio ? 'Tú' : g.pagadorNombre} pagó · {g.fechaTexto}
-										{#if g.categoria}· {g.categoria.nombre}{/if}
-									</span>
-								</p>
+								<p class="mt-0.5 text-xs text-muted">{g.fechaTexto}</p>
 							</div>
 
 							<!-- Monto + mi parte -->

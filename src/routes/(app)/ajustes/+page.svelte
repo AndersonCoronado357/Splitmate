@@ -27,13 +27,17 @@
 		page.data.hogarActivo as { nombre: string; rol: string; miembros?: number } | undefined
 	);
 
-	const miembroDesde = $derived(
-		perfil.desde
-			? new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric' }).format(
-					new Date(perfil.desde)
-				)
-			: null
-	);
+	// Array manual: no confío en `Intl.DateTimeFormat('es-CO')` en todos los
+	// runtimes (algunos no tienen el locale y caen a inglés).
+	const MESES_LARGO = [
+		'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+		'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+	];
+	const miembroDesde = $derived.by(() => {
+		if (!perfil.desde) return null;
+		const d = new Date(perfil.desde);
+		return `${MESES_LARGO[d.getMonth()]} ${d.getFullYear()}`;
+	});
 
 	const rolLabel = (rol: string) => (rol === 'admin' ? 'Administrador' : 'Miembro');
 
