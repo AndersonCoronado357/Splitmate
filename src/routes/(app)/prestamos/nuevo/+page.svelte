@@ -71,6 +71,9 @@
 	const receptorElegido = $derived(miembros.find((m) => m.userId === receptorId) ?? null);
 
 	type Cuota = { numero: number; monto: number; fechaEsperada: string | null };
+	// Reparto en ENTEROS: COP no usa centavos y el MoneyInput tampoco. Si el
+	// total no se divide exacto, las primeras cuotas pagan un peso de más
+	// (`iguales`) o el resto se acumula en la primera cuota (`porcentaje`).
 	const cuotas = $derived.by<Cuota[] | null>(() => {
 		const m = monto ?? 0;
 		const n = Math.max(1, Math.min(24, numCuotas | 0));
@@ -78,44 +81,45 @@
 		const fechas = fechasCuota.map((f) => (f && f.length > 0 ? f : null));
 
 		if (tipoPago === 'iguales') {
-			const cents = Math.floor((m * 100) / n);
+			const base = Math.floor(m / n);
+			const sobra = m - base * n; // 0..n-1
 			const arr: Cuota[] = [];
-			let acumulado = 0;
 			for (let i = 0; i < n; i++) {
-				const valor = cents / 100;
-				arr.push({ numero: i + 1, monto: valor, fechaEsperada: fechas[i] });
-				acumulado += valor;
+				arr.push({
+					numero: i + 1,
+					monto: base + (i < sobra ? 1 : 0),
+					fechaEsperada: fechas[i]
+				});
 			}
-			const diff = Math.round((m - acumulado) * 100) / 100;
-			if (Math.abs(diff) > 0.001) arr[0].monto = Math.round((arr[0].monto + diff) * 100) / 100;
 			return arr;
 		}
 		if (tipoPago === 'porcentaje') {
 			const arr: Cuota[] = [];
 			let total = 0;
+			let suma = 0;
 			for (let i = 0; i < n; i++) {
 				const pct = Number(valoresCuota[i] || '0');
 				if (!Number.isFinite(pct) || pct < 0) return null;
-				const monto = Math.round(((m * pct) / 100) * 100) / 100;
-				arr.push({ numero: i + 1, monto, fechaEsperada: fechas[i] });
+				const mt = Math.round((m * pct) / 100);
+				arr.push({ numero: i + 1, monto: mt, fechaEsperada: fechas[i] });
 				total += pct;
+				suma += mt;
 			}
 			if (Math.abs(total - 100) > 0.01) return null;
-			const suma = arr.reduce((a, c) => a + c.monto, 0);
-			const diff = Math.round((m - suma) * 100) / 100;
-			if (Math.abs(diff) > 0.001) arr[0].monto = Math.round((arr[0].monto + diff) * 100) / 100;
+			const resto = m - suma;
+			if (resto !== 0 && arr.length > 0) arr[0].monto += resto;
 			return arr;
 		}
 		if (tipoPago === 'exacto') {
 			const arr: Cuota[] = [];
 			let total = 0;
 			for (let i = 0; i < n; i++) {
-				const monto = Number(valoresCuota[i] || '0');
+				const monto = Math.round(Number(valoresCuota[i] || '0'));
 				if (!Number.isFinite(monto) || monto <= 0) return null;
 				arr.push({ numero: i + 1, monto, fechaEsperada: fechas[i] });
 				total += monto;
 			}
-			if (Math.abs(total - m) > 0.01) return null;
+			if (total !== m) return null;
 			return arr;
 		}
 		return null;
@@ -378,6 +382,8 @@
 							name="motivo"
 							bind:value={motivo}
 							rows="3"
+							autocomplete="off"
+							spellcheck="false"
 							placeholder="Para el arriendo, mercado, etc."
 							class={inputClass + ' resize-none lg:min-h-0 lg:flex-1'}
 							maxlength="120"

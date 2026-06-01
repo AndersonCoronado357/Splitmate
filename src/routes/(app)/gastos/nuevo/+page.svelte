@@ -81,36 +81,72 @@
 			.map(([id]) => id)
 	);
 
+	// Clamping en vivo: en 'porcentaje' la suma no puede pasar de 100; en
+	// 'exacto' la suma no puede pasar del monto total. Si el usuario escribe
+	// de más, lo recortamos al máximo disponible.
+	$effect(() => {
+		if (modo === 'porcentaje') {
+			let usado = 0;
+			for (const id of activos) {
+				const v = Number(estado[id]?.valor || '0');
+				const safe = Number.isFinite(v) && v >= 0 ? v : 0;
+				const disponible = Math.max(0, 100 - usado);
+				const clamp = Math.min(safe, disponible);
+				if (clamp !== safe) {
+					estado[id].valor = String(clamp);
+				}
+				usado += clamp;
+			}
+		}
+		if (modo === 'exacto' && monto !== null && monto > 0) {
+			let usado = 0;
+			for (const id of activos) {
+				const v = Number(estado[id]?.valor || '0');
+				const safe = Number.isFinite(v) && v >= 0 ? v : 0;
+				const disponible = Math.max(0, monto - usado);
+				const clamp = Math.min(safe, disponible);
+				if (clamp !== safe) {
+					estado[id].valor = String(clamp);
+				}
+				usado += clamp;
+			}
+		}
+	});
+
+	// Repartos en ENTEROS — no usamos centavos en COP. Si el monto no se
+	// divide exacto, las primeras personas pagan un peso de más (modo
+	// `iguales`) o el resto se acumula en el primero (`porcentaje` /
+	// `partes`). Así cada parte coincide con lo que el MoneyInput permite
+	// tipear y nadie queda debiendo céntimos imposibles de pagar.
 	function dividirIguales() {
 		const n = activos.length;
 		if (n === 0) return [];
-		const cents = Math.floor((montoNum * 100) / n);
-		const arr = activos.map((id) => ({ participante_id: id, monto: cents / 100 }));
-		const totalCents = cents * n;
-		const remainder = Math.round(montoNum * 100) - totalCents;
-		if (remainder !== 0) arr[0].monto = (cents + remainder) / 100;
-		return arr;
+		const base = Math.floor(montoNum / n);
+		const sobra = montoNum - base * n; // 0..n-1
+		return activos.map((id, i) => ({
+			participante_id: id,
+			monto: base + (i < sobra ? 1 : 0)
+		}));
 	}
 	function dividirPorcentaje() {
 		const arr: Array<{ participante_id: string; monto: number }> = [];
-		let totalCents = 0;
+		let suma = 0;
 		for (const id of activos) {
 			const pct = Number(estado[id].valor || '0');
-			const mt = Math.round(((montoNum * pct) / 100) * 100) / 100;
+			const mt = Math.round((montoNum * pct) / 100);
 			arr.push({ participante_id: id, monto: mt });
-			totalCents += Math.round(mt * 100);
+			suma += mt;
 		}
-		const target = Math.round(montoNum * 100);
-		const remainder = (target - totalCents) / 100;
-		if (arr.length && remainder !== 0) {
-			arr[0].monto = Math.round((arr[0].monto + remainder) * 100) / 100;
+		const resto = montoNum - suma;
+		if (arr.length && resto !== 0) {
+			arr[0].monto += resto;
 		}
 		return arr;
 	}
 	function dividirExacto() {
 		return activos.map((id) => ({
 			participante_id: id,
-			monto: Number(estado[id].valor || '0')
+			monto: Math.round(Number(estado[id].valor || '0'))
 		}));
 	}
 	function dividirPartes() {
@@ -118,16 +154,15 @@
 		const total = partes.reduce((a, b) => a + b, 0);
 		if (total === 0) return [];
 		const arr: Array<{ participante_id: string; monto: number }> = [];
-		let totalCents = 0;
+		let suma = 0;
 		for (let i = 0; i < activos.length; i++) {
-			const mt = Math.round(((montoNum * partes[i]) / total) * 100) / 100;
+			const mt = Math.round((montoNum * partes[i]) / total);
 			arr.push({ participante_id: activos[i], monto: mt });
-			totalCents += Math.round(mt * 100);
+			suma += mt;
 		}
-		const target = Math.round(montoNum * 100);
-		const remainder = (target - totalCents) / 100;
-		if (arr.length && remainder !== 0) {
-			arr[0].monto = Math.round((arr[0].monto + remainder) * 100) / 100;
+		const resto = montoNum - suma;
+		if (arr.length && resto !== 0) {
+			arr[0].monto += resto;
 		}
 		return arr;
 	}
@@ -282,6 +317,7 @@
 								name="titulo"
 								type="text"
 								required
+								autocomplete="off"
 								bind:value={titulo}
 								placeholder="Ej. Mercado de la semana"
 								class={inputClass}
@@ -341,6 +377,8 @@
 							name="notas"
 							bind:value={notas}
 							rows="3"
+							autocomplete="off"
+							spellcheck="false"
 							placeholder="Detalles del gasto…"
 							class={inputClass + ' resize-none lg:min-h-0 lg:flex-1'}
 						></textarea>
