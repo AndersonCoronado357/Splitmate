@@ -212,6 +212,7 @@
 									id="nombre"
 									name="nombre"
 									type="text"
+									autocomplete="off"
 									bind:value={nombre}
 									onblur={guardarHogarNombre}
 									class={inputClass}

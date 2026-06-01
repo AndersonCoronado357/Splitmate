@@ -238,6 +238,7 @@
 							name="nombre"
 							type="text"
 							required
+							autocomplete="off"
 							maxlength="40"
 							bind:value={formNombre}
 							placeholder="Ej. Mascota, Suscripciones…"

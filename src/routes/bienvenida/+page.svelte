@@ -106,6 +106,7 @@
 							name="nombre"
 							type="text"
 							required
+							autocomplete="off"
 							placeholder="Casa, Apto 301, Roomies…"
 							class={inputClass}
 						/>
@@ -141,6 +142,7 @@
 							name="codigo"
 							type="text"
 							required
+							autocomplete="off"
 							placeholder="Ej. A3F9C2"
 							autocapitalize="characters"
 							class={inputClass + ' uppercase tracking-[0.2em]'}

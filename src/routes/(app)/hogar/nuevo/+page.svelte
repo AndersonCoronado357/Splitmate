@@ -117,6 +117,7 @@
 						name="nombre"
 						type="text"
 						required
+						autocomplete="off"
 						bind:value={nombreInput}
 						placeholder="Casa, Apto 301, Roomies…"
 						class={inputClass}
@@ -155,6 +156,7 @@
 						name="codigo"
 						type="text"
 						required
+						autocomplete="off"
 						bind:value={codigoInput}
 						placeholder="Ej. A3F9C2"
 						autocapitalize="characters"

@@ -210,6 +210,7 @@
 						bind:value={nombre}
 						maxlength="60"
 						placeholder="Tu nombre"
+						autocomplete="off"
 						onblur={guardarNombre}
 						onkeydown={onNombreKey}
 						aria-label="Tu nombre"

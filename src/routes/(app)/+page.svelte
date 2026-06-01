@@ -202,7 +202,7 @@
 			class="col-span-2 rounded-card border border-border bg-surface p-5 shadow-card md:col-span-1"
 		>
 			<p class="text-sm text-muted">Tu saldo</p>
-			<p class={'tabular mt-1 text-4xl font-bold ' + colorSaldo(resumen.saldoNeto)}>
+			<p class={'tabular mt-1 text-3xl font-bold ' + colorSaldo(resumen.saldoNeto)}>
 				{resumen.saldoNeto < -0.01 ? '− ' : ''}{fmt(Math.abs(resumen.saldoNeto))}
 			</p>
 			<p class="mt-1 text-sm text-muted">
@@ -218,12 +218,12 @@
 
 		<div class="rounded-card bg-money-favor-bg p-5">
 			<p class="text-sm text-money-favor">Te deben</p>
-			<p class="tabular mt-1 text-2xl font-semibold text-money-favor">{fmt(resumen.aFavor)}</p>
+			<p class="tabular mt-1 text-3xl font-bold text-money-favor">{fmt(resumen.aFavor)}</p>
 		</div>
 
 		<div class="rounded-card bg-money-contra-bg p-5">
 			<p class="text-sm text-money-contra">Debes</p>
-			<p class="tabular mt-1 text-2xl font-semibold text-money-contra">{fmt(resumen.enContra)}</p>
+			<p class="tabular mt-1 text-3xl font-bold text-money-contra">{fmt(resumen.enContra)}</p>
 		</div>
 	</section>
 
@@ -470,7 +470,7 @@
 				<!-- Si el filtro activo deja la lista vacía pero hay datos en otro tab -->
 				{#if (filtro === 'debes' && filasLeDebo.length === 0 && filasMeDeben.length > 0) || (filtro === 'te_deben' && filasMeDeben.length === 0 && filasLeDebo.length > 0)}
 					<div
-						class="flex flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface px-6 py-10 text-center"
+						class="flex flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface px-6 py-10 text-center lg:min-h-0 lg:flex-1"
 					>
 						<p class="text-sm text-muted">
 							{filtro === 'debes'

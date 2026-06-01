@@ -538,18 +538,22 @@
 					</div>
 				</section>
 
-				<!-- Plan de cuotas — mismo estilo que la sección "Cómo va cada uno" de gastos -->
-				{#if p.cuotas.length > 0}
-					<section class="flex flex-col lg:min-h-0 lg:flex-1">
-						<div class="flex items-end justify-between">
-							<p class={labelClass}>
-								<Coins size={13} class="text-brand-500" />
-								Plan de cuotas
-							</p>
+				<!-- Plan de cuotas — mismo estilo que la sección "Cómo va cada uno" de gastos.
+				     Si no hay cuotas, mostramos un empty state que ocupa el alto
+				     disponible para que la columna no quede con un hueco enorme. -->
+				<section class="flex flex-col lg:min-h-0 lg:flex-1">
+					<div class="flex items-end justify-between">
+						<p class={labelClass}>
+							<Coins size={13} class="text-brand-500" />
+							Plan de cuotas
+						</p>
+						{#if p.cuotas.length > 0}
 							<p class="tabular text-xs text-muted">
 								{fmt(totalConfirmado)} cobrado{#if totalEsperando > 0.01} · {fmt(totalEsperando)} por confirmar{/if}
 							</p>
-						</div>
+						{/if}
+					</div>
+					{#if p.cuotas.length > 0}
 						<!-- Lista de cuotas: llena el alto disponible y hace scroll interno
 						     si hay muchas. Así el contenedor de la columna izquierda
 						     no se estira para acomodar 24 cuotas. -->
@@ -577,8 +581,14 @@
 								</li>
 							{/each}
 						</ul>
-					</section>
-				{/if}
+					{:else}
+						<div
+							class="mt-2 flex flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface p-8 text-center lg:min-h-0 lg:flex-1"
+						>
+							<p class="text-sm text-muted">Este préstamo se devuelve sin cuotas fijas.</p>
+						</div>
+					{/if}
+				</section>
 			</div>
 
 			<!-- COLUMNA DERECHA -->
