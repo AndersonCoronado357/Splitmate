@@ -2,6 +2,18 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { listarPrestamos, type PrestamoListado } from '$lib/server/prestamos';
 import type { PerfilMin } from '$lib/server/gastos';
+import { enviarPushAUsuario } from '$lib/server/push';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+// Devuelve el display_name del usuario para meterlo en el título del push.
+async function nombreDe(supabase: SupabaseClient, userId: string): Promise<string> {
+	const { data } = await supabase
+		.from('profiles')
+		.select('display_name')
+		.eq('id', userId)
+		.maybeSingle();
+	return data?.display_name || 'Alguien';
+}
 
 // Listado de préstamos del hogar activo + acciones para confirmar, rechazar,
 // borrar (si está pendiente) o registrar una devolución asociada.
@@ -136,6 +148,19 @@ export const actions: Actions = {
 			return fail(400, { error: `No se pudo guardar el plan: ${eCuotas.message}` });
 		}
 
+		// Push al receptor para que confirme o rechace.
+		try {
+			const quien = await nombreDe(supabase, user.id);
+			await enviarPushAUsuario(receptorId, {
+				title: `${quien} marcó un préstamo a tu favor`,
+				body: 'Confirma o rechaza desde el detalle.',
+				url: `/prestamos/${prestNuevo.id}`,
+				tag: `prestamo-pendiente:${prestNuevo.id}`
+			});
+		} catch (e) {
+			console.warn('[push] no se pudo notificar préstamo nuevo', e);
+		}
+
 		return { ok: true };
 	},
 
@@ -147,6 +172,13 @@ export const actions: Actions = {
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { error: 'Falta el id.' });
 
+		// Necesito al prestador para avisarle.
+		const { data: prAntes } = await supabase
+			.from('prestamos')
+			.select('prestador_id')
+			.eq('id', id)
+			.maybeSingle();
+
 		const { error, count } = await supabase
 			.from('prestamos')
 			.update(
@@ -157,6 +189,20 @@ export const actions: Actions = {
 			.eq('estado', 'pendiente');
 		if (error) return fail(400, { error: error.message });
 		if (!count) return fail(403, { error: 'No se pudo confirmar el préstamo.' });
+
+		if (prAntes?.prestador_id && prAntes.prestador_id !== user.id) {
+			try {
+				const quien = await nombreDe(supabase, user.id);
+				await enviarPushAUsuario(prAntes.prestador_id, {
+					title: `${quien} confirmó el préstamo`,
+					body: 'Ya cuenta en el balance del hogar.',
+					url: `/prestamos/${id}`,
+					tag: `prestamo-confirmado:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar confirmación de préstamo', e);
+			}
+		}
 		return { ok: true };
 	},
 
@@ -167,6 +213,12 @@ export const actions: Actions = {
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { error: 'Falta el id.' });
 
+		const { data: prAntes } = await supabase
+			.from('prestamos')
+			.select('prestador_id')
+			.eq('id', id)
+			.maybeSingle();
+
 		const { error, count } = await supabase
 			.from('prestamos')
 			.update({ estado: 'rechazado' }, { count: 'exact' })
@@ -174,6 +226,20 @@ export const actions: Actions = {
 			.eq('estado', 'pendiente');
 		if (error) return fail(400, { error: error.message });
 		if (!count) return fail(403, { error: 'No se pudo rechazar el préstamo.' });
+
+		if (prAntes?.prestador_id && prAntes.prestador_id !== user.id) {
+			try {
+				const quien = await nombreDe(supabase, user.id);
+				await enviarPushAUsuario(prAntes.prestador_id, {
+					title: `${quien} rechazó el préstamo`,
+					body: 'No se registrará en el balance.',
+					url: `/prestamos/${id}`,
+					tag: `prestamo-rechazado:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar rechazo de préstamo', e);
+			}
+		}
 		return { ok: true };
 	},
 
@@ -241,6 +307,19 @@ export const actions: Actions = {
 			prestamo_id: prestamoId
 		});
 		if (error) return fail(400, { error: error.message });
+
+		// Push al prestador para que confirme la devolución.
+		try {
+			const quien = await nombreDe(supabase, user.id);
+			await enviarPushAUsuario(pr.prestador_id, {
+				title: `${quien} marcó una devolución`,
+				body: 'Confirma o rechaza el pago desde el préstamo.',
+				url: `/prestamos/${prestamoId}`,
+				tag: `devolucion-pendiente:${prestamoId}`
+			});
+		} catch (e) {
+			console.warn('[push] no se pudo notificar devolución', e);
+		}
 		return { ok: true };
 	},
 
@@ -252,6 +331,12 @@ export const actions: Actions = {
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { error: 'Falta el id.' });
 
+		const { data: pagoAntes } = await supabase
+			.from('pagos')
+			.select('pagador_id, prestamo_id')
+			.eq('id', id)
+			.maybeSingle();
+
 		const { error, count } = await supabase
 			.from('pagos')
 			.update(
@@ -262,6 +347,19 @@ export const actions: Actions = {
 			.eq('estado', 'pendiente');
 		if (error) return fail(400, { error: error.message });
 		if (!count) return fail(403, { error: 'No se pudo confirmar la devolución.' });
+
+		if (pagoAntes?.pagador_id && pagoAntes.pagador_id !== user.id) {
+			try {
+				await enviarPushAUsuario(pagoAntes.pagador_id, {
+					title: 'Confirmaron tu devolución',
+					body: 'Tu pago al préstamo quedó registrado.',
+					url: pagoAntes.prestamo_id ? `/prestamos/${pagoAntes.prestamo_id}` : '/prestamos',
+					tag: `devolucion-confirmada:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar confirmación de devolución', e);
+			}
+		}
 		return { ok: true };
 	},
 
@@ -271,6 +369,12 @@ export const actions: Actions = {
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { error: 'Falta el id.' });
 
+		const { data: pagoAntes } = await supabase
+			.from('pagos')
+			.select('pagador_id, prestamo_id')
+			.eq('id', id)
+			.maybeSingle();
+
 		const { error, count } = await supabase
 			.from('pagos')
 			.update({ estado: 'rechazado' }, { count: 'exact' })
@@ -278,6 +382,19 @@ export const actions: Actions = {
 			.eq('estado', 'pendiente');
 		if (error) return fail(400, { error: error.message });
 		if (!count) return fail(403, { error: 'No se pudo rechazar la devolución.' });
+
+		if (pagoAntes?.pagador_id && pagoAntes.pagador_id !== user.id) {
+			try {
+				await enviarPushAUsuario(pagoAntes.pagador_id, {
+					title: 'Rechazaron tu devolución',
+					body: 'Revisa el préstamo y vuelve a marcarla si hubo un error.',
+					url: pagoAntes.prestamo_id ? `/prestamos/${pagoAntes.prestamo_id}` : '/prestamos',
+					tag: `devolucion-rechazada:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar rechazo de devolución', e);
+			}
+		}
 		return { ok: true };
 	},
 
@@ -289,6 +406,12 @@ export const actions: Actions = {
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { error: 'Falta el id.' });
 
+		const { data: prAntes } = await supabase
+			.from('prestamos')
+			.select('prestador_id, receptor_id')
+			.eq('id', id)
+			.maybeSingle();
+
 		const { error, count } = await supabase
 			.from('prestamos')
 			.update({ estado: 'saldado' }, { count: 'exact' })
@@ -296,6 +419,25 @@ export const actions: Actions = {
 			.eq('estado', 'activo');
 		if (error) return fail(400, { error: error.message });
 		if (!count) return fail(403, { error: 'No se pudo marcar como pagado.' });
+
+		// Push al OTRO lado (no a quien lo marcó).
+		if (prAntes) {
+			const otro =
+				prAntes.prestador_id === user.id ? prAntes.receptor_id : prAntes.prestador_id;
+			if (otro) {
+				try {
+					const quien = await nombreDe(supabase, user.id);
+					await enviarPushAUsuario(otro, {
+						title: `${quien} marcó el préstamo como saldado`,
+						body: 'Ya no cuenta en el balance.',
+						url: `/prestamos/${id}`,
+						tag: `prestamo-saldado:${id}`
+					});
+				} catch (e) {
+					console.warn('[push] no se pudo notificar saldado', e);
+				}
+			}
+		}
 		return { ok: true };
 	}
 };

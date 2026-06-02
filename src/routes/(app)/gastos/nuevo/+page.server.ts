@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { listarCategorias } from '$lib/server/gastos';
 import { elegirHogarActivo, listarHogares } from '$lib/server/hogares';
+import { enviarPushAUsuarios } from '$lib/server/push';
 
 export const load: PageServerLoad = async ({ locals: { supabase, user }, parent }) => {
 	if (!user) redirect(303, '/login');
@@ -63,6 +64,32 @@ export const actions: Actions = {
 		});
 		if (error) {
 			return fail(400, { error: error.message, valores: Object.fromEntries(fd) });
+		}
+
+		// Push a los demás participantes (no a mí). Best-effort: si el envío
+		// falla no rompemos la creación del gasto.
+		const otrosIds = divisiones
+			.map((d) => d.participante_id)
+			.filter((id) => id && id !== user.id);
+		if (otrosIds.length > 0) {
+			// Nombre del pagador para que la notificación diga quién registró.
+			const { data: perfil } = await supabase
+				.from('profiles')
+				.select('display_name')
+				.eq('id', user.id)
+				.maybeSingle();
+			const pagador = perfil?.display_name || 'Alguien';
+
+			try {
+				await enviarPushAUsuarios(otrosIds, {
+					title: `${pagador} registró un gasto`,
+					body: `${titulo} — toca para ver tu parte`,
+					url: `/gastos/${nuevoId}`,
+					tag: `gasto:${nuevoId}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar gasto nuevo', e);
+			}
 		}
 
 		redirect(303, `/gastos/${nuevoId}`);

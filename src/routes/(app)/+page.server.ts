@@ -7,6 +7,17 @@ import {
 } from '$lib/server/gastos';
 import { listarPagos, type PagoVista } from '$lib/server/pagos';
 import { elegirHogarActivo, listarHogares } from '$lib/server/hogares';
+import { enviarPushAUsuario } from '$lib/server/push';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+async function nombreDe(supabase: SupabaseClient, userId: string): Promise<string> {
+	const { data } = await supabase
+		.from('profiles')
+		.select('display_name')
+		.eq('id', userId)
+		.maybeSingle();
+	return data?.display_name || 'Alguien';
+}
 
 // Pantalla principal: muestra el balance del usuario con cada otro miembro del
 // hogar activo. Llamamos al RPC `balance_hogar` (migración 010 + 016) que
@@ -114,7 +125,7 @@ export const actions: Actions = {
 		// Solo el participante de la división puede abonar desde aquí.
 		const { data: div } = await supabase
 			.from('gasto_divisiones')
-			.select('id, participante_id, monto')
+			.select('id, participante_id, monto, gasto_id, gastos_compartidos(pagador_id, titulo)')
 			.eq('id', divisionId)
 			.maybeSingle();
 		if (!div || div.participante_id !== user.id) {
@@ -130,6 +141,25 @@ export const actions: Actions = {
 		});
 
 		if (error) return fail(400, { error: error.message });
+
+		// Push al pagador del gasto para que confirme.
+		type Embed = { pagador_id: string; titulo: string } | { pagador_id: string; titulo: string }[] | null;
+		const g = (div as unknown as { gastos_compartidos: Embed; gasto_id: string }).gastos_compartidos;
+		const pagadorId = g ? (Array.isArray(g) ? g[0]?.pagador_id : g.pagador_id) : null;
+		const titulo = g ? (Array.isArray(g) ? g[0]?.titulo : g.titulo) : 'Un gasto';
+		if (pagadorId && pagadorId !== user.id) {
+			try {
+				const quien = await nombreDe(supabase, user.id);
+				await enviarPushAUsuario(pagadorId, {
+					title: `${quien} dice que te pagó`,
+					body: `${titulo} — confirma o rechaza el aporte`,
+					url: `/gastos/${(div as { gasto_id: string }).gasto_id}`,
+					tag: `aporte-pendiente:${(div as { gasto_id: string }).gasto_id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar aporte (home)', e);
+			}
+		}
 		return { ok: true };
 	},
 
@@ -154,17 +184,34 @@ export const actions: Actions = {
 			return fail(400, { error: 'Monto inválido.' });
 		}
 
-		const { error } = await supabase.from('pagos').insert({
-			hogar_id: hogarActivo.id,
-			pagador_id: user.id,
-			receptor_id: receptorId,
-			monto,
-			fecha: fecha ?? new Date().toISOString().slice(0, 10),
-			nota,
-			registrado_por: user.id
-		});
+		const { data: nuevoPago, error } = await supabase
+			.from('pagos')
+			.insert({
+				hogar_id: hogarActivo.id,
+				pagador_id: user.id,
+				receptor_id: receptorId,
+				monto,
+				fecha: fecha ?? new Date().toISOString().slice(0, 10),
+				nota,
+				registrado_por: user.id
+			})
+			.select('id')
+			.maybeSingle();
 
 		if (error) return fail(400, { error: error.message });
+
+		// Push al receptor para que confirme.
+		try {
+			const quien = await nombreDe(supabase, user.id);
+			await enviarPushAUsuario(receptorId, {
+				title: `${quien} dice que te pagó`,
+				body: 'Confirma o rechaza el pago desde el inicio.',
+				url: '/',
+				tag: `pago-pendiente:${nuevoPago?.id ?? receptorId}`
+			});
+		} catch (e) {
+			console.warn('[push] no se pudo notificar pago', e);
+		}
 		return { ok: true };
 	},
 
@@ -174,6 +221,12 @@ export const actions: Actions = {
 		const fd = await request.formData();
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { error: 'Falta el id.' });
+
+		const { data: pagoAntes } = await supabase
+			.from('pagos')
+			.select('pagador_id')
+			.eq('id', id)
+			.maybeSingle();
 
 		const { error, count } = await supabase
 			.from('pagos')
@@ -186,6 +239,19 @@ export const actions: Actions = {
 
 		if (error) return fail(400, { error: error.message });
 		if (!count) return fail(403, { error: 'No se pudo confirmar el pago.' });
+
+		if (pagoAntes?.pagador_id && pagoAntes.pagador_id !== user.id) {
+			try {
+				await enviarPushAUsuario(pagoAntes.pagador_id, {
+					title: 'Confirmaron tu pago',
+					body: 'Ya quedó registrado en el balance.',
+					url: '/',
+					tag: `pago-confirmado:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar confirmación de pago', e);
+			}
+		}
 		return { ok: true };
 	},
 
@@ -196,6 +262,12 @@ export const actions: Actions = {
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { error: 'Falta el id.' });
 
+		const { data: pagoAntes } = await supabase
+			.from('pagos')
+			.select('pagador_id')
+			.eq('id', id)
+			.maybeSingle();
+
 		const { error, count } = await supabase
 			.from('pagos')
 			.update({ estado: 'rechazado' }, { count: 'exact' })
@@ -204,6 +276,19 @@ export const actions: Actions = {
 
 		if (error) return fail(400, { error: error.message });
 		if (!count) return fail(403, { error: 'No se pudo rechazar el pago.' });
+
+		if (pagoAntes?.pagador_id && pagoAntes.pagador_id !== user.id) {
+			try {
+				await enviarPushAUsuario(pagoAntes.pagador_id, {
+					title: 'Rechazaron tu pago',
+					body: 'Revisa el balance y vuelve a marcarlo si hubo un error.',
+					url: '/',
+					tag: `pago-rechazado:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar rechazo de pago', e);
+			}
+		}
 		return { ok: true };
 	},
 

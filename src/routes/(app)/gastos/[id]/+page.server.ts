@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { cargarGasto, type PerfilMin } from '$lib/server/gastos';
+import { enviarPushAUsuario } from '$lib/server/push';
 
 export const load: PageServerLoad = async ({
 	locals: { supabase, user },
@@ -103,15 +104,49 @@ export const actions: Actions = {
 		});
 		if (error) return fail(400, { seccion: 'aportar', error: error.message });
 
+		// Push al pagador del gasto si yo (deudor) registré un aporte que
+		// necesita su confirmación. Si yo SOY el pagador no hay nada que
+		// notificar (aporte se confirma solo).
+		if (!esPagador && pagadorId) {
+			const { data: perfil } = await supabase
+				.from('profiles')
+				.select('display_name')
+				.eq('id', user.id)
+				.maybeSingle();
+			const quien = perfil?.display_name || 'Alguien';
+			const { data: g } = await supabase
+				.from('gastos_compartidos')
+				.select('titulo, id')
+				.eq('id', (div as { gasto_id: string }).gasto_id)
+				.maybeSingle();
+			try {
+				await enviarPushAUsuario(pagadorId, {
+					title: `${quien} dice que te pagó`,
+					body: `${g?.titulo ?? 'Un gasto'} — confirma o rechaza el aporte`,
+					url: `/gastos/${g?.id ?? ''}`,
+					tag: `aporte-pendiente:${(div as { gasto_id: string }).gasto_id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar aporte pendiente', e);
+			}
+		}
+
 		return { seccion: 'aportar', ok: true };
 	},
 
 	// El pagador del gasto confirma un aporte pendiente del deudor.
-	confirmarAporte: async ({ request, locals: { supabase, user } }) => {
+	confirmarAporte: async ({ request, locals: { supabase, user }, params }) => {
 		if (!user) redirect(303, '/login');
 		const fd = await request.formData();
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { seccion: 'aportar', error: 'Falta el id.' });
+
+		// Necesitamos saber a quién avisar: registrado_por es el deudor.
+		const { data: aporteAntes } = await supabase
+			.from('aportes')
+			.select('registrado_por')
+			.eq('id', id)
+			.maybeSingle();
 
 		const { error, count } = await supabase
 			.from('aportes')
@@ -125,15 +160,37 @@ export const actions: Actions = {
 		if (!count) {
 			return fail(403, { seccion: 'aportar', error: 'No se pudo confirmar el aporte.' });
 		}
+
+		// Push al deudor: "te confirmaron el pago".
+		const deudorId = aporteAntes?.registrado_por;
+		if (deudorId && deudorId !== user.id) {
+			try {
+				await enviarPushAUsuario(deudorId, {
+					title: 'Te confirmaron un pago',
+					body: 'Tu aporte quedó registrado.',
+					url: `/gastos/${params.id}`,
+					tag: `aporte-confirmado:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar confirmación', e);
+			}
+		}
+
 		return { seccion: 'aportar', ok: true };
 	},
 
 	// El pagador del gasto rechaza un aporte pendiente.
-	rechazarAporte: async ({ request, locals: { supabase, user } }) => {
+	rechazarAporte: async ({ request, locals: { supabase, user }, params }) => {
 		if (!user) redirect(303, '/login');
 		const fd = await request.formData();
 		const id = String(fd.get('id') ?? '').trim();
 		if (!id) return fail(400, { seccion: 'aportar', error: 'Falta el id.' });
+
+		const { data: aporteAntes } = await supabase
+			.from('aportes')
+			.select('registrado_por')
+			.eq('id', id)
+			.maybeSingle();
 
 		const { error, count } = await supabase
 			.from('aportes')
@@ -144,6 +201,22 @@ export const actions: Actions = {
 		if (!count) {
 			return fail(403, { seccion: 'aportar', error: 'No se pudo rechazar el aporte.' });
 		}
+
+		// Push al deudor: "tu aporte fue rechazado".
+		const deudorId = aporteAntes?.registrado_por;
+		if (deudorId && deudorId !== user.id) {
+			try {
+				await enviarPushAUsuario(deudorId, {
+					title: 'Tu aporte fue rechazado',
+					body: 'Revisa el gasto y vuelve a registrarlo si hubo un error.',
+					url: `/gastos/${params.id}`,
+					tag: `aporte-rechazado:${id}`
+				});
+			} catch (e) {
+				console.warn('[push] no se pudo notificar rechazo', e);
+			}
+		}
+
 		return { seccion: 'aportar', ok: true };
 	},
 
