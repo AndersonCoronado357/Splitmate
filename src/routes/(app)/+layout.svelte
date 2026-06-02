@@ -3,6 +3,7 @@
 	import AppBar from '$lib/components/AppBar.svelte';
 	import HogarSwitcher from '$lib/components/HogarSwitcher.svelte';
 	import SkeletonContenido from '$lib/components/SkeletonContenido.svelte';
+	import AppNotifier from '$lib/components/AppNotifier.svelte';
 	import { cambioHogar } from '$lib/stores/cambioHogar.svelte';
 	import { navTabs } from '$lib/nav';
 	import { afterNavigate, preloadData } from '$app/navigation';
@@ -69,4 +70,9 @@
 
 	<!-- Selector de hogar: botón flotante (escritorio). En móvil va en la barra superior. -->
 	<HogarSwitcher variant="flotante" />
+
+	<!-- Notificaciones in-app vía Realtime broadcast. Sin UI propia, solo
+	     escucha eventos y emite Notification. Fallback de Web Push para
+	     navegadores donde FCM rechaza. -->
+	<AppNotifier />
 </div>

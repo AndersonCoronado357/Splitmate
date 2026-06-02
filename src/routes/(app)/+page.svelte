@@ -10,6 +10,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { supabaseBrowser } from '$lib/supabase-browser';
+	import PushBanner from '$lib/components/PushBanner.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -195,6 +196,8 @@
 		<p class="text-xs text-muted">Hola, {data.perfil?.display_name || 'bienvenido'}</p>
 		<p class="text-lg font-semibold text-text">{data.hogarActivo?.nombre}</p>
 	</header>
+
+	<PushBanner />
 
 	<!-- Tarjetas de resumen -->
 	<section class="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3">

@@ -8,6 +8,7 @@
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import RecorteFoto from '$lib/components/RecorteFoto.svelte';
+	import NotificacionesPush from '$lib/components/NotificacionesPush.svelte';
 	import { page } from '$app/state';
 	import type { ActionData } from './$types';
 
@@ -409,29 +410,33 @@
 				</div>
 			</section>
 
-			<!-- Herramientas -->
+			<!-- Herramientas (incluye toggle de notificaciones push como
+			     parte de la misma tarjeta, no como sección aparte) -->
 			<section class="flex flex-col">
 				<h2 class="px-1 text-xs font-semibold tracking-wide text-muted uppercase">Herramientas</h2>
-				<ul class="mt-2 overflow-hidden rounded-card bg-surface shadow-card">
-					{#each herramientas as item (item.href)}
-						{@const Icono = item.icon}
-						<li>
-							<a
-								href={item.href}
-								class="flex items-center gap-3 px-4 py-3.5 transition-colors duration-200 ease-out hover:bg-brand-50"
-							>
-								<span class="rounded-input bg-brand-50 p-2 text-brand-500">
-									<Icono size={18} />
-								</span>
-								<span class="flex-1">
-									<span class="block text-sm font-medium text-text">{item.titulo}</span>
-									<span class="block text-xs text-muted">{item.detalle}</span>
-								</span>
-								<ChevronRight size={18} class="text-muted" />
-							</a>
-						</li>
-					{/each}
-				</ul>
+				<div class="mt-2 overflow-hidden rounded-card bg-surface shadow-card">
+					<ul>
+						{#each herramientas as item (item.href)}
+							{@const Icono = item.icon}
+							<li>
+								<a
+									href={item.href}
+									class="flex items-center gap-3 px-4 py-3.5 transition-colors duration-200 ease-out hover:bg-brand-50"
+								>
+									<span class="rounded-input bg-brand-50 p-2 text-brand-500">
+										<Icono size={18} />
+									</span>
+									<span class="flex-1">
+										<span class="block text-sm font-medium text-text">{item.titulo}</span>
+										<span class="block text-xs text-muted">{item.detalle}</span>
+									</span>
+									<ChevronRight size={18} class="text-muted" />
+								</a>
+							</li>
+						{/each}
+					</ul>
+					<NotificacionesPush />
+				</div>
 			</section>
 
 			<!-- Cerrar sesión -->
