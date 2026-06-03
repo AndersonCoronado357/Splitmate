@@ -246,10 +246,11 @@
 	);
 	const miParteEfectiva = $derived(movsEfectivos.reduce((a, m) => a + m.miParte, 0));
 
-	// Listas: siempre del período (no recortadas por selección), porque queremos
-	// VER el dashboard completo y solo resaltar el seleccionado.
-	const porCategoriaDelPeriodo = $derived(porCategoriaDe(movsPeriodo));
-	const porPersonaDelPeriodo = $derived(porPersonaDe(movsPeriodo));
+	// Listas: usan el foco (período + mes elegido), así también responden
+	// al click en la gráfica. Si querés ver el dashboard completo, deselecciona
+	// el mes en la gráfica o cambia de chip de período.
+	const porCategoriaDelPeriodo = $derived(porCategoriaDe(movsEnFoco));
+	const porPersonaDelPeriodo = $derived(porPersonaDe(movsEnFoco));
 
 	// Evolución: si hay categoría/persona seleccionada, ES su evolución;
 	// sino, la del hogar. NUNCA se recorta por mesElegido — la gráfica
