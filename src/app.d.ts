@@ -19,7 +19,11 @@ declare global {
 			user: User | null;
 		}
 		interface PageData {
-			session: Session | null;
+			// La session que enviamos al cliente está APLANADA (sin `.user`,
+			// que dispara warnings de supabase-js cuando se serializa).
+			// El usuario validado va en `user` y se usa desde ahí.
+			session: Omit<Session, 'user'> | null;
+			user: User | null;
 		}
 		// interface PageState {}
 	}
