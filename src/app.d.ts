@@ -1,31 +1,35 @@
-// See https://svelte.dev/docs/kit/types#app.d.ts
-// for information about these interfaces
-import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
+// Tipos globales de la app. Auth y datos los provee acmsy (sin Supabase).
+import type { DbClient } from '$lib/server/sb';
+
+type AppUser = {
+	id: string;
+	email: string;
+	created_at: string | null;
+	user_metadata: Record<string, unknown>;
+};
+type AppSession = {
+	access_token: string;
+	refresh_token: string;
+	expires_at: number;
+	expires_in: number;
+	token_type: string;
+};
 
 declare global {
 	namespace App {
-		interface Platform {
-			env: Env;
-			ctx: ExecutionContext;
-			caches: CacheStorage;
-			cf?: IncomingRequestCfProperties;
-		}
-
 		// interface Error {}
 		interface Locals {
-			supabase: SupabaseClient;
-			safeGetSession: () => Promise<{ session: Session | null; user: User | null }>;
-			session: Session | null;
-			user: User | null;
+			supabase: DbClient;
+			safeGetSession: () => Promise<{ session: AppSession | null; user: AppUser | null }>;
+			session: AppSession | null;
+			user: AppUser | null;
 		}
 		interface PageData {
-			// La session que enviamos al cliente está APLANADA (sin `.user`,
-			// que dispara warnings de supabase-js cuando se serializa).
-			// El usuario validado va en `user` y se usa desde ahí.
-			session: Omit<Session, 'user'> | null;
-			user: User | null;
+			session: AppSession | null;
+			user: AppUser | null;
 		}
 		// interface PageState {}
+		// interface Platform {}
 	}
 }
 

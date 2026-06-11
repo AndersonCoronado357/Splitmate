@@ -1,58 +1,32 @@
-import { createServerClient } from '@supabase/ssr';
-import { type Handle } from '@sveltejs/kit';
-import { sequence } from '@sveltejs/kit/hooks';
-import { dev } from '$app/environment';
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY } from '$env/static/public';
+import type { Handle } from '@sveltejs/kit';
+import { createDb } from '$lib/server/sb';
+import * as auth from '$lib/server/acmsy/auth';
 
-const supabase: Handle = async ({ event, resolve }) => {
-	event.locals.supabase = createServerClient(
-		PUBLIC_SUPABASE_URL,
-		PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-		{
-			cookies: {
-				getAll: () => event.cookies.getAll(),
-				setAll: (cookiesToSet) => {
-					cookiesToSet.forEach(({ name, value, options }) => {
-						// En dev servimos por HTTP (incluido el celular vía IP de la red),
-						// donde el navegador descarta cookies `Secure`. Forzamos no-secure
-						// en dev para que la sesión persista; en producción (HTTPS) van
-						// seguras.
-						event.cookies.set(name, value, { ...options, path: '/', secure: !dev });
-					});
-				}
-			}
+// Auth de acmsy: lee la cookie de sesion firmada, valida al usuario contra la
+// base, y deja en locals el usuario, la sesion y el "cliente de datos"
+// (adaptador compatible con Supabase sobre pg+RLS, con el usuario ya fijado).
+export const handle: Handle = async ({ event, resolve }) => {
+	const uid = auth.readSessionUid(event.cookies);
+	let user: ReturnType<typeof auth.toLocalsUser> | null = null;
+	if (uid) {
+		const row = await auth.findById(uid);
+		if (row) {
+			user = auth.toLocalsUser(row);
+			auth.touchSeen(uid).catch(() => {});
 		}
-	);
+	}
 
-	// getSession() solo no es seguro (no valida el JWT). safeGetSession valida
-	// el usuario con getUser() antes de confiar en la sesión.
-	event.locals.safeGetSession = async () => {
-		const {
-			data: { session }
-		} = await event.locals.supabase.auth.getSession();
-		if (!session) return { session: null, user: null };
-
-		const {
-			data: { user },
-			error
-		} = await event.locals.supabase.auth.getUser();
-		if (error) return { session: null, user: null };
-
-		return { session, user };
-	};
+	event.locals.user = user;
+	event.locals.session = user ? auth.sessionObject() : null;
+	event.locals.supabase = createDb(user ? user.id : null);
+	event.locals.safeGetSession = async () => ({
+		session: event.locals.session,
+		user: event.locals.user
+	});
 
 	return resolve(event, {
 		filterSerializedResponseHeaders(name) {
-			return name === 'content-range' || name === 'x-supabase-api-version';
+			return name === 'content-range';
 		}
 	});
 };
-
-const authState: Handle = async ({ event, resolve }) => {
-	const { session, user } = await event.locals.safeGetSession();
-	event.locals.session = session;
-	event.locals.user = user;
-	return resolve(event);
-};
-
-export const handle: Handle = sequence(supabase, authState);
