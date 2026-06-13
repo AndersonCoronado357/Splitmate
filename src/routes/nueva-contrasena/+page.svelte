@@ -2,10 +2,12 @@
 	import { enhance } from '$app/forms';
 	import DecorPanel from '$lib/components/DecorPanel.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
-	let { form }: { form: ActionData } = $props();
+	let { form, data }: { form: ActionData; data: PageData } = $props();
 	let cargando = $state(false);
+	// El token llega por el enlace del correo (?token=...) y se reenvia con el form.
+	const token = $derived(form?.token ?? data.token ?? '');
 </script>
 
 <div class="relative h-dvh overflow-x-hidden overflow-y-auto bg-bg lg:overflow-hidden">
@@ -45,6 +47,7 @@
 				class="animate-fade-in space-y-3.5"
 				style="animation-delay: 140ms"
 			>
+				<input type="hidden" name="token" value={token} />
 				<div class="space-y-1.5">
 					<label for="password" class="block text-sm font-medium text-text">Nueva contraseña</label>
 					<PasswordInput

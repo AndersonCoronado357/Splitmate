@@ -1,5 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
+import * as auth from '$lib/server/acmsy/auth';
+import { verifyPassword } from '$lib/server/acmsy/security';
 
 // Solo permitimos destinos internos (evita redirecciones abiertas).
 function destinoSeguro(next: string | null): string {
@@ -7,7 +9,7 @@ function destinoSeguro(next: string | null): string {
 }
 
 export const actions: Actions = {
-	default: async ({ request, url, locals: { supabase } }) => {
+	default: async ({ request, url, cookies }) => {
 		const formData = await request.formData();
 		const email = String(formData.get('email') ?? '').trim();
 		const password = String(formData.get('password') ?? '');
@@ -16,11 +18,13 @@ export const actions: Actions = {
 			return fail(400, { email, error: 'Escribe tu correo y contraseña.' });
 		}
 
-		const { error } = await supabase.auth.signInWithPassword({ email, password });
-		if (error) {
+		const user = await auth.findByEmail(email);
+		if (!user || !user.password_hash || !verifyPassword(password, user.password_hash)) {
 			return fail(400, { email, error: 'Correo o contraseña incorrectos.' });
 		}
 
+		auth.setSession(cookies, user);
+		await auth.recordLogin(user.id);
 		redirect(303, destinoSeguro(url.searchParams.get('next')));
 	}
 };
