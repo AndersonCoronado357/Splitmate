@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 import type { PerfilMin } from './gastos';
 
 export type ModoFijo = 'iguales' | 'porcentaje' | 'exacto' | 'partes';

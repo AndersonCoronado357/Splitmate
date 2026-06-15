@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 import type { PerfilMin } from './gastos';
 
 // Vista de un pago, ya con los nombres/avatares del pagador y receptor

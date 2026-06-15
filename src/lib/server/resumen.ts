@@ -9,7 +9,7 @@
 // instantáneo y sin viaje al server.
 // ============================================================
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 
 export type TipoMov = 'compartido' | 'fijo' | 'prestamo' | 'pago';
 

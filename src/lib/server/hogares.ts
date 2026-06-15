@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 import type { Cookies } from '@sveltejs/kit';
 
 // Cookie que recuerda cuál es el hogar activo del usuario (por dispositivo).

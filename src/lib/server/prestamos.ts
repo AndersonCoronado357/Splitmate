@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 
 // Un préstamo es una transferencia directa de dinero entre dos miembros del
 // hogar (Fase 7). Vive aparte de los gastos compartidos.
