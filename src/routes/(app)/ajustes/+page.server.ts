@@ -1,12 +1,13 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
+import * as auth from '$lib/server/acmsy/auth';
+import { verifyPassword } from '$lib/server/acmsy/security';
+import { saveAvatar, removeAvatar } from '$lib/server/avatars';
 
-const BUCKET = 'avatares';
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export const actions: Actions = {
-	// Salir del hogar activo (borra mi membresía). Si era el único, el layout
-	// te manda a /bienvenida.
+	// Salir del hogar activo (borra mi membresia).
 	salirHogar: async ({ locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) redirect(303, '/login');
@@ -20,11 +21,7 @@ export const actions: Actions = {
 			.maybeSingle();
 
 		if (data?.hogar_id) {
-			await supabase
-				.from('miembros_hogar')
-				.delete()
-				.eq('hogar_id', data.hogar_id)
-				.eq('user_id', user.id);
+			await supabase.from('miembros_hogar').delete().eq('hogar_id', data.hogar_id).eq('user_id', user.id);
 		}
 		redirect(303, '/');
 	},
@@ -37,18 +34,14 @@ export const actions: Actions = {
 		const fd = await request.formData();
 		const nombre = String(fd.get('nombre') ?? '').trim();
 		if (!nombre) return fail(400, { seccion: 'perfil', error: 'Escribe tu nombre.' });
-		if (nombre.length > 60)
-			return fail(400, { seccion: 'perfil', error: 'Máximo 60 caracteres.' });
+		if (nombre.length > 60) return fail(400, { seccion: 'perfil', error: 'Máximo 60 caracteres.' });
 
-		const { error } = await supabase
-			.from('profiles')
-			.upsert({ id: user.id, display_name: nombre });
+		const { error } = await supabase.from('profiles').update({ display_name: nombre }).eq('id', user.id);
 		if (error) return fail(400, { seccion: 'perfil', error: error.message });
-
 		return { seccion: 'perfil', ok: true };
 	},
 
-	// Subir / reemplazar la foto de perfil.
+	// Subir / reemplazar la foto de perfil (guardada en disco por acmsy).
 	subirFoto: async ({ request, locals: { supabase, safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { seccion: 'foto', error: 'Sesión no válida.' });
@@ -62,22 +55,12 @@ export const actions: Actions = {
 		if (file.size > MAX_BYTES)
 			return fail(400, { seccion: 'foto', error: 'La imagen no puede pesar más de 5 MB.' });
 
-		// Una sola foto por usuario: misma ruta, se sobreescribe.
-		const path = `${user.id}/avatar`;
-		const { error: upErr } = await supabase.storage
-			.from(BUCKET)
-			.upload(path, file, { upsert: true, contentType: file.type });
-		if (upErr) return fail(400, { seccion: 'foto', error: upErr.message });
+		const bytes = Buffer.from(await file.arrayBuffer());
+		await saveAvatar(user.id, bytes, file.type);
+		const url = `/avatars/${user.id}?v=${Date.now()}`;
 
-		const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-		// ?v=… rompe la caché del navegador para que se vea la nueva foto al instante.
-		const url = `${pub.publicUrl}?v=${Date.now()}`;
-
-		const { error: dbErr } = await supabase
-			.from('profiles')
-			.upsert({ id: user.id, avatar_url: url });
+		const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id);
 		if (dbErr) return fail(400, { seccion: 'foto', error: dbErr.message });
-
 		return { seccion: 'foto', ok: true };
 	},
 
@@ -86,17 +69,14 @@ export const actions: Actions = {
 		const { user } = await safeGetSession();
 		if (!user) return fail(401, { seccion: 'foto', error: 'Sesión no válida.' });
 
-		await supabase.storage.from(BUCKET).remove([`${user.id}/avatar`]);
-		const { error } = await supabase
-			.from('profiles')
-			.upsert({ id: user.id, avatar_url: null });
+		await removeAvatar(user.id);
+		const { error } = await supabase.from('profiles').update({ avatar_url: null }).eq('id', user.id);
 		if (error) return fail(400, { seccion: 'foto', error: error.message });
-
 		return { seccion: 'foto', ok: true };
 	},
 
-	// Cambiar la contraseña de la cuenta (pide la actual y la verifica).
-	cambiarContrasena: async ({ request, locals: { supabase, safeGetSession } }) => {
+	// Cambiar la contraseña (verifica la actual con el hash scrypt de acmsy).
+	cambiarContrasena: async ({ request, locals: { safeGetSession } }) => {
 		const { user } = await safeGetSession();
 		if (!user?.email) return fail(401, { seccion: 'clave', error: 'Sesión no válida.' });
 
@@ -111,16 +91,12 @@ export const actions: Actions = {
 		if (nueva !== repetir)
 			return fail(400, { seccion: 'clave', error: 'Las contraseñas nuevas no coinciden.' });
 
-		// Verificar la contraseña actual reautenticando al mismo usuario.
-		const { error: verErr } = await supabase.auth.signInWithPassword({
-			email: user.email,
-			password: actual
-		});
-		if (verErr) return fail(400, { seccion: 'clave', error: 'La contraseña actual no es correcta.' });
+		const dbUser = await auth.findById(user.id);
+		if (!dbUser?.password_hash || !verifyPassword(actual, dbUser.password_hash)) {
+			return fail(400, { seccion: 'clave', error: 'La contraseña actual no es correcta.' });
+		}
 
-		const { error } = await supabase.auth.updateUser({ password: nueva });
-		if (error) return fail(400, { seccion: 'clave', error: error.message });
-
+		await auth.setPassword(user.id, nueva);
 		return { seccion: 'clave', ok: true };
 	}
 };

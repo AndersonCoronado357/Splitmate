@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ locals: { supabase, user }, parent,
 
 // Helper: resuelve hogar activo y rola admin.
 async function hogarYRol(
-	supabase: import('@supabase/supabase-js').SupabaseClient,
+	supabase: import('$lib/server/sb').DbClient,
 	userId: string,
 	cookies: import('@sveltejs/kit').Cookies
 ) {

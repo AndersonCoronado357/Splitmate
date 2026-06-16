@@ -8,7 +8,7 @@ import {
 	type FijoDivisionPlantilla
 } from '$lib/server/fijos';
 import { elegirHogarActivo, listarHogares } from '$lib/server/hogares';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 import type { Cookies } from '@sveltejs/kit';
 
 async function hogarYRol(supabase: SupabaseClient, userId: string, cookies: Cookies) {

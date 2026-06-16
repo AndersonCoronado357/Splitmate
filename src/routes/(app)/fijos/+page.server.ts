@@ -2,7 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { listarGastosFijos, type FijoListado } from '$lib/server/fijos';
 import { elegirHogarActivo, listarHogares } from '$lib/server/hogares';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 import type { Cookies } from '@sveltejs/kit';
 
 // Resuelve hogar activo + rol del usuario actual (igual que en /categorias).

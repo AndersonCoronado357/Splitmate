@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { listarPrestamos, type PrestamoListado } from '$lib/server/prestamos';
 import type { PerfilMin } from '$lib/server/gastos';
 import { enviarPushAUsuario } from '$lib/server/push';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 
 async function nombreDe(supabase: SupabaseClient, userId: string): Promise<string> {
 	const { data } = await supabase

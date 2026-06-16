@@ -8,7 +8,7 @@ import {
 import { listarPagos, type PagoVista } from '$lib/server/pagos';
 import { elegirHogarActivo, listarHogares } from '$lib/server/hogares';
 import { enviarPushAUsuario } from '$lib/server/push';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DbClient as SupabaseClient } from '$lib/server/sb';
 
 async function nombreDe(supabase: SupabaseClient, userId: string): Promise<string> {
 	const { data } = await supabase
