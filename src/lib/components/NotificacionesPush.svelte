@@ -10,7 +10,8 @@
 		razonNoSoportado,
 		estadoPush,
 		activarPush,
-		desactivarPush
+		desactivarPush,
+		asegurarSuscripcion
 	} from '$lib/push';
 
 	let estado = $state<
@@ -30,6 +31,9 @@
 		const e = await estadoPush();
 		estado = e;
 		if (e === 'no-soportado') mensajeNoSoportado = razonNoSoportado();
+		// Si ya tenía permiso pero quizá nunca se guardó la suscripción (p.ej. la
+		// otorgó antes), nos aseguramos de registrarla en el servidor.
+		if (e === 'activado') asegurarSuscripcion().catch(() => {});
 	}
 
 	onMount(() => {

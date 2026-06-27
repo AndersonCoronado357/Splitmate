@@ -78,6 +78,53 @@ export async function estadoPush(): Promise<EstadoNotif> {
 	return notifSilenciada() ? 'silenciado' : 'activado';
 }
 
+function b64ToU8(base64: string): Uint8Array {
+	const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+	const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+	const raw = atob(b64);
+	const arr = new Uint8Array(raw.length);
+	for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+	return arr;
+}
+
+// Crea (si falta) la suscripción de Web Push y la guarda en el servidor, para
+// que la app pueda enviarte notificaciones cuando ocurra un evento de tu hogar.
+// Idempotente: se puede llamar varias veces.
+export async function asegurarSuscripcion(): Promise<ActivacionResultado> {
+	if (!browser || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+		return { ok: false, error: 'Tu navegador no soporta notificaciones de fondo.' };
+	}
+	if (Notification.permission !== 'granted') return { ok: false, error: 'Sin permiso.' };
+	try {
+		const pub = (await (await fetch('/api/push/key')).text()).trim();
+		if (!pub) return { ok: false, error: 'Falta la clave del servidor.' };
+		const reg = await navigator.serviceWorker.register('/push-sw.js');
+		await navigator.serviceWorker.ready;
+		let sub = await reg.pushManager.getSubscription();
+		if (!sub) {
+			sub = await reg.pushManager.subscribe({
+				userVisibleOnly: true,
+				applicationServerKey: b64ToU8(pub)
+			});
+		}
+		const r = await fetch('/api/push/subscribe', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(sub)
+		});
+		if (!r.ok) return { ok: false, error: 'El servidor no aceptó la suscripción.' };
+		return { ok: true };
+	} catch (e) {
+		const n = (e as Error)?.name || '';
+		return {
+			ok: false,
+			error:
+				'Tu navegador rechazó el push (' + (n || 'error') +
+				'). En Brave de PC, activa "Use Google services for push messaging".'
+		};
+	}
+}
+
 export type ActivacionResultado = { ok: boolean; error?: string };
 
 export async function activarPush(): Promise<ActivacionResultado> {
@@ -102,6 +149,11 @@ export async function activarPush(): Promise<ActivacionResultado> {
 		};
 	}
 
+	// Suscribe al push y guarda la suscripción en el servidor (para recibir
+	// notificaciones de fondo). Si el navegador la rechaza, lo reportamos.
+	const sus = await asegurarSuscripcion();
+	if (!sus.ok) return sus;
+
 	// Si el usuario las había silenciado, las re-activamos.
 	try {
 		localStorage.removeItem(STORAGE_OFF);
@@ -112,9 +164,25 @@ export async function activarPush(): Promise<ActivacionResultado> {
 }
 
 export async function desactivarPush(): Promise<{ ok: boolean; error?: string }> {
-	// El permiso de Notification no se puede revocar por JS — el usuario lo
-	// hace en la configuración del navegador. Acá solo marcamos el flag
-	// para que `AppNotifier` no muestre nada hasta que reactive.
+	// Cancela la suscripción de push en el navegador y la borra del servidor.
+	try {
+		if (browser && 'serviceWorker' in navigator) {
+			const reg = await navigator.serviceWorker.ready;
+			const sub = await reg.pushManager.getSubscription();
+			if (sub) {
+				await fetch('/api/push/subscribe', {
+					method: 'DELETE',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ endpoint: sub.endpoint })
+				}).catch(() => {});
+				await sub.unsubscribe().catch(() => false);
+			}
+		}
+	} catch {
+		/* si no se puede, igual marcamos silenciado abajo */
+	}
+	// El permiso de Notification no se puede revocar por JS; marcamos el flag
+	// local para que no se muestre nada hasta reactivar.
 	try {
 		localStorage.setItem(STORAGE_OFF, '1');
 	} catch {
