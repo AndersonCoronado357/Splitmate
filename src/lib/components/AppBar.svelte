@@ -6,7 +6,7 @@
 </script>
 
 <header
-	class="sticky top-0 z-20 flex shrink-0 items-center gap-1 border-b border-border bg-surface px-2 py-2 md:hidden"
+	class="app-topbar sticky top-0 z-20 flex shrink-0 items-center gap-1 border-b border-border bg-surface px-2 py-2 lg:hidden"
 >
 	<button
 		type="button"

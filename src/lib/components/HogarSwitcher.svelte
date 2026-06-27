@@ -124,7 +124,7 @@
 		aria-haspopup="menu"
 		aria-expanded={abierto}
 		aria-label="Cambiar de hogar"
-		class="fixed bottom-4 right-4 z-30 hidden size-10 items-center justify-center rounded-full bg-brand-50 text-brand-700 shadow-card ring-1 ring-brand-200/60 transition hover:bg-brand-200 active:scale-95 md:flex"
+		class="app-fab fixed bottom-4 right-4 z-30 hidden size-10 items-center justify-center rounded-full bg-brand-50 text-brand-700 shadow-card ring-1 ring-brand-200/60 transition hover:bg-brand-200 active:scale-95 lg:flex"
 	>
 		<House size={18} />
 	</button>

@@ -9,6 +9,20 @@
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<meta name="apple-mobile-web-app-title" content="Splitmate" />
 		<title>Splitmate</title>
+		<script>
+			// Marca el documento como tactil ANTES de pintar, para forzar el layout
+			// movil sin importar lo que el navegador/login reporten. El "modo
+			// escritorio" de los navegadores moviles falsea ancho, pointer y
+			// user-agent a PC, pero NO el hardware: pantalla tactil y tamano fisico
+			// del aparato. Usamos varias senales del APARATO (no del navegador).
+			// (Ver html.is-touch en layout.css.)
+			try {
+				var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+				var touch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+				var phone = window.screen && screen.width > 0 && screen.width <= 600;
+				if (coarse || touch || phone) document.documentElement.classList.add('is-touch');
+			} catch (e) {}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

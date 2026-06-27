@@ -252,8 +252,50 @@ input[type='number'] {
 
 /* Escritorio (>=768px): la barra lateral va fija a la izquierda; el contenido
    se corre por su ancho. El scroll sigue viviendo en .app-content. */
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
 	.app-body {
 		padding-left: 15rem; /* ancho de la barra lateral fija (md:w-60) */
 	}
+}
+
+/* ============================================================
+   Dispositivos tactiles (celulares/tablets): SIEMPRE layout movil, aunque el
+   navegador reporte un ancho grande (p.ej. "modo escritorio" de Brave/Chrome,
+   que renderiza a >=1024px). Se detecta por puntero grueso (touch), no por ancho.
+   ============================================================ */
+@media (pointer: coarse) {
+	.app-sidenav {
+		transform: translateX(-100%) !important;
+	}
+	.app-sidenav.is-open {
+		transform: translateX(0) !important;
+	}
+	.app-topbar {
+		display: flex !important;
+	}
+	.app-fab {
+		display: none !important;
+	}
+	.app-body {
+		padding-left: 0 !important;
+	}
+}
+
+/* Refuerzo por JS (app.html marca html.is-touch via navigator.maxTouchPoints).
+   Cubre el "modo escritorio" de navegadores moviles, que falsea pointer/ancho
+   a escritorio pero no puede ocultar la pantalla tactil del aparato. */
+html.is-touch .app-sidenav {
+	transform: translateX(-100%) !important;
+}
+html.is-touch .app-sidenav.is-open {
+	transform: translateX(0) !important;
+}
+html.is-touch .app-topbar {
+	display: flex !important;
+}
+html.is-touch .app-fab {
+	display: none !important;
+}
+html.is-touch .app-body {
+	padding-left: 0 !important;
 }

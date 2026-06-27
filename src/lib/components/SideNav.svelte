@@ -34,15 +34,16 @@
 	<button
 		type="button"
 		aria-label="Cerrar menú"
-		class="fixed inset-0 z-30 bg-black/40 md:hidden"
+		class="fixed inset-0 z-30 bg-black/40 lg:hidden"
 		onclick={onCerrar}
 	></button>
 {/if}
 
 <aside
-	class="fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-border bg-surface transition-transform duration-200 ease-out md:w-60 md:translate-x-0"
+	class="app-sidenav fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-border bg-surface transition-transform duration-200 ease-out lg:w-60 lg:translate-x-0"
 	class:translate-x-0={abierto}
 	class:-translate-x-full={!abierto}
+	class:is-open={abierto}
 >
 	<div class="flex items-center justify-between px-5 py-5">
 		<a href="/" class="flex items-center gap-2.5">
@@ -52,7 +53,7 @@
 		<button
 			type="button"
 			aria-label="Cerrar menú"
-			class="rounded-full p-1.5 text-muted transition-colors hover:bg-bg md:hidden"
+			class="rounded-full p-1.5 text-muted transition-colors hover:bg-bg lg:hidden"
 			onclick={onCerrar}
 		>
 			<X size={20} />
