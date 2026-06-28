@@ -3,7 +3,7 @@
 	import Select from '$lib/components/Select.svelte';
 	import DecorPanel from '$lib/components/DecorPanel.svelte';
 	import { monedas } from '$lib/monedas';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/logo.png';
 	import Home from '@lucide/svelte/icons/house';
 	import Users from '@lucide/svelte/icons/users';
 	import Receipt from '@lucide/svelte/icons/receipt';

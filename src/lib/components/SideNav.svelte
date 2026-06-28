@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page, navigating } from '$app/state';
 	import { navTabs, navActivo } from '$lib/nav';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/logo.png';
 	import X from '@lucide/svelte/icons/x';
 
 	let { abierto = false, onCerrar }: { abierto?: boolean; onCerrar?: () => void } = $props();
