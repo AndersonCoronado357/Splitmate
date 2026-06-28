@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { listarCategorias } from '$lib/server/gastos';
 import { elegirHogarActivo, listarHogares } from '$lib/server/hogares';
+import { enviarPushAUsuarios } from '$lib/server/push';
 
 export const load: PageServerLoad = async ({
 	locals: { supabase, user },
@@ -76,6 +77,29 @@ export const actions: Actions = {
 		});
 		if (error) {
 			return fail(400, { error: error.message, valores: Object.fromEntries(fd) });
+		}
+
+		// Aviso a los demás participantes (no a mí). Best-effort: si el push falla
+		// no rompemos la creación del gasto fijo.
+		const otrosIds = divisiones
+			.map((d) => d.participante_id)
+			.filter((id) => id && id !== user.id);
+		if (otrosIds.length > 0) {
+			const { data: perfil } = await supabase
+				.from('profiles')
+				.select('display_name')
+				.eq('id', user.id)
+				.maybeSingle();
+			const quien = perfil?.display_name || 'Alguien';
+			try {
+				await enviarPushAUsuarios(otrosIds, {
+					title: `${quien} agregó un gasto fijo`,
+					body: `${nombre} — toca para verlo`,
+					url: `/fijos/${nuevoId}`
+				});
+			} catch {
+				/* best-effort */
+			}
 		}
 
 		redirect(303, `/fijos/${nuevoId}`);
