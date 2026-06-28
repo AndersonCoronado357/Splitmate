@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import logo from '$lib/assets/logo.png';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -22,7 +23,8 @@
 </script>
 
 <div class="w-full">
-	<div class="animate-fade-in mb-5 flex justify-center lg:hidden" style="animation-delay: 0ms">
+	<div class="animate-fade-in mb-5 flex items-center justify-center gap-2 lg:hidden" style="animation-delay: 0ms">
+		<img src={logo} alt="" class="h-8 w-8" />
 		<span class="text-xl font-bold tracking-tight text-text">Splitmate</span>
 	</div>
 

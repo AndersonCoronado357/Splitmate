@@ -1,4 +1,5 @@
 <script lang="ts">
+	import logoWhite from '$lib/assets/logo-white.png';
 	type Modo = 'login' | 'registro' | 'bienvenida';
 	let { modo }: { modo: Modo } = $props();
 
@@ -35,18 +36,7 @@
 	</div>
 
 	<div class="animate-fade-in relative flex items-center gap-3" style="animation-delay: 0ms">
-		<svg viewBox="0 0 512 512" class="h-11 w-11" aria-hidden="true">
-			<circle cx="256" cy="256" r="150" fill="#ffffff" />
-			<rect
-				x="245"
-				y="84"
-				width="22"
-				height="344"
-				rx="11"
-				fill="#0eb5a6"
-				transform="rotate(28 256 256)"
-			/>
-		</svg>
+		<img src={logoWhite} alt="" class="h-11 w-11" />
 		<span class="text-2xl font-bold">Splitmate</span>
 	</div>
 

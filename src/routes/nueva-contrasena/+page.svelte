@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import DecorPanel from '$lib/components/DecorPanel.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import logo from '$lib/assets/logo.png';
 	import type { ActionData, PageData } from './$types';
 
 	let { form, data }: { form: ActionData; data: PageData } = $props();
@@ -24,7 +25,8 @@
 		class="flex min-h-dvh items-center justify-center px-6 py-8 lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2 lg:px-12 lg:py-12"
 	>
 		<div class="w-full max-w-sm">
-			<div class="animate-fade-in mb-5 flex justify-center lg:hidden" style="animation-delay: 0ms">
+			<div class="animate-fade-in mb-5 flex items-center justify-center gap-2 lg:hidden" style="animation-delay: 0ms">
+				<img src={logo} alt="" class="h-8 w-8" />
 				<span class="text-xl font-bold tracking-tight text-text">Splitmate</span>
 			</div>
 
