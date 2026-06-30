@@ -1,9 +1,10 @@
 <script lang="ts">
 	import logoWhite from '$lib/assets/logo-white.png';
+	import { APP_VERSION } from '$lib/version';
 	type Modo = 'login' | 'registro' | 'bienvenida';
 	let { modo }: { modo: Modo } = $props();
 
-	const VERSION = '1.0.0';
+	const VERSION = APP_VERSION;
 
 	const copy = $derived(
 		modo === 'bienvenida'

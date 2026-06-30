@@ -8,6 +8,7 @@
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import RecorteFoto from '$lib/components/RecorteFoto.svelte';
+	import { APP_VERSION } from '$lib/version';
 	import NotificacionesPush from '$lib/components/NotificacionesPush.svelte';
 	import { page } from '$app/state';
 	import type { ActionData } from './$types';
@@ -453,7 +454,7 @@
 	</div>
 
 	<footer class="shrink-0 pt-4 text-center">
-		<p class="text-xs text-muted">Splitmate · versión 1.0.0</p>
+		<p class="text-xs text-muted">Splitmate · versión {APP_VERSION}</p>
 	</footer>
 </div>
 
