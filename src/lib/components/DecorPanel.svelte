@@ -3,7 +3,7 @@
 	type Modo = 'login' | 'registro' | 'bienvenida';
 	let { modo }: { modo: Modo } = $props();
 
-	const VERSION = '1.0';
+	const VERSION = '1.0.0';
 
 	const copy = $derived(
 		modo === 'bienvenida'

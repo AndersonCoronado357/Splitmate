@@ -453,7 +453,7 @@
 	</div>
 
 	<footer class="shrink-0 pt-4 text-center">
-		<p class="text-xs text-muted">Splitmate · versión 1.0</p>
+		<p class="text-xs text-muted">Splitmate · versión 1.0.0</p>
 	</footer>
 </div>
 
