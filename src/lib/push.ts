@@ -87,6 +87,24 @@ function b64ToU8(base64: string): Uint8Array {
 	return arr;
 }
 
+// El subscribe a veces tira AbortError transitorio (servicio push del navegador).
+// Reintentamos 1 vez tras limpiar cualquier suscripción a medias.
+async function subscribirConReintento(
+	reg: ServiceWorkerRegistration,
+	key: Uint8Array
+): Promise<PushSubscription> {
+	const opts: PushSubscriptionOptionsInit = { userVisibleOnly: true, applicationServerKey: key };
+	try {
+		return await reg.pushManager.subscribe(opts);
+	} catch (e) {
+		if ((e as Error)?.name !== 'AbortError') throw e;
+		const vieja = await reg.pushManager.getSubscription().catch(() => null);
+		if (vieja) await vieja.unsubscribe().catch(() => {});
+		await new Promise((r) => setTimeout(r, 900));
+		return await reg.pushManager.subscribe(opts);
+	}
+}
+
 // Crea (si falta) la suscripción de Web Push y la guarda en el servidor, para
 // que la app pueda enviarte notificaciones cuando ocurra un evento de tu hogar.
 // Idempotente: se puede llamar varias veces.
@@ -101,12 +119,7 @@ export async function asegurarSuscripcion(): Promise<ActivacionResultado> {
 		const reg = await navigator.serviceWorker.register('/push-sw.js');
 		await navigator.serviceWorker.ready;
 		let sub = await reg.pushManager.getSubscription();
-		if (!sub) {
-			sub = await reg.pushManager.subscribe({
-				userVisibleOnly: true,
-				applicationServerKey: b64ToU8(pub)
-			});
-		}
+		if (!sub) sub = await subscribirConReintento(reg, b64ToU8(pub));
 		const r = await fetch('/api/push/subscribe', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -115,12 +128,12 @@ export async function asegurarSuscripcion(): Promise<ActivacionResultado> {
 		if (!r.ok) return { ok: false, error: 'El servidor no aceptó la suscripción.' };
 		return { ok: true };
 	} catch (e) {
-		const n = (e as Error)?.name || '';
+		const err = e as Error;
 		return {
 			ok: false,
 			error:
-				'Tu navegador rechazó el push (' + (n || 'error') +
-				'). En Brave de PC, activa "Use Google services for push messaging".'
+				'No se pudo suscribir (' + (err?.name || 'error') + '): ' + (err?.message || 'sin detalle') +
+				'. Si es AbortError, en Brave activa "Use Google services for push messaging", o prueba en Chrome.'
 		};
 	}
 }
